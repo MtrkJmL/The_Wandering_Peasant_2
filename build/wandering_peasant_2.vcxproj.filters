@@ -1,0 +1,46 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="C:\Users\Mustafa\Desktop\CCGS\Claude-Code-Game-Studios\The_Wandering_Peasant_2\src\main.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Mustafa\Desktop\CCGS\Claude-Code-Game-Studios\The_Wandering_Peasant_2\src\Game.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Mustafa\Desktop\CCGS\Claude-Code-Game-Studios\The_Wandering_Peasant_2\src\Player.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Mustafa\Desktop\CCGS\Claude-Code-Game-Studios\The_Wandering_Peasant_2\src\Enemy.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Mustafa\Desktop\CCGS\Claude-Code-Game-Studios\The_Wandering_Peasant_2\src\Boss.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Mustafa\Desktop\CCGS\Claude-Code-Game-Studios\The_Wandering_Peasant_2\src\Item.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Mustafa\Desktop\CCGS\Claude-Code-Game-Studios\The_Wandering_Peasant_2\src\Potion.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Mustafa\Desktop\CCGS\Claude-Code-Game-Studios\The_Wandering_Peasant_2\src\ChapterMap.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Mustafa\Desktop\CCGS\Claude-Code-Game-Studios\The_Wandering_Peasant_2\src\RunState.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Mustafa\Desktop\CCGS\Claude-Code-Game-Studios\The_Wandering_Peasant_2\src\Quest.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Mustafa\Desktop\CCGS\Claude-Code-Game-Studios\The_Wandering_Peasant_2\src\Node.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="C:\Users\Mustafa\Desktop\CCGS\Claude-Code-Game-Studios\The_Wandering_Peasant_2\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{BA1E79D0-07B5-3084-B9A2-2EE7F92ADBEC}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

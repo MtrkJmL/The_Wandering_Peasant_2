@@ -1,0 +1,13 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <CustomBuild Include="C:\Users\Mustafa\Desktop\CCGS\Claude-Code-Game-Studios\The_Wandering_Peasant_2\build\CMakeFiles\9ec0be6c3af797df6b6450308261e7b9\generate.stamp.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="CMake Rules">
+      <UniqueIdentifier>{66795D79-2EEE-3543-828D-AED927C41565}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

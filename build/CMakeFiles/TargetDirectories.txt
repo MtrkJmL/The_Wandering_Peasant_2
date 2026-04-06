@@ -1,0 +1,4 @@
+C:/Users/Mustafa/Desktop/CCGS/Claude-Code-Game-Studios/The_Wandering_Peasant_2/build/CMakeFiles/wandering_peasant_2.dir
+C:/Users/Mustafa/Desktop/CCGS/Claude-Code-Game-Studios/The_Wandering_Peasant_2/build/CMakeFiles/test_map.dir
+C:/Users/Mustafa/Desktop/CCGS/Claude-Code-Game-Studios/The_Wandering_Peasant_2/build/CMakeFiles/ALL_BUILD.dir
+C:/Users/Mustafa/Desktop/CCGS/Claude-Code-Game-Studios/The_Wandering_Peasant_2/build/CMakeFiles/ZERO_CHECK.dir
