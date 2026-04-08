@@ -54,7 +54,9 @@ private:
     EnemyBehaviour  behaviour;
     bool            canBeTalkedTo;
     int             bribeCost;
-    bool            telegraphing = false; // Brute pre-attack tell
+    bool            telegraphing    = false; // Brute pre-attack tell
+    bool            skipNextTurn    = false; // Void Collapse: skip next attack
+    bool            regenSuppressed = false; // Immortal Scar: cannot regenerate HP
 
     // Status effects on this enemy
     int bleedStacks  = 0; // 0 = not bleeding, 1 = bleeding (permanent until death)
@@ -85,13 +87,20 @@ public:
     int  rollDefense() const;
     Item generateDrop(int luck) const;
 
-    void setTelegraphing(bool t) { telegraphing = t; }
+    void setTelegraphing(bool t)   { telegraphing    = t; }
+    bool isSkippingTurn()    const { return skipNextTurn; }
+    void setSkipNextTurn()         { skipNextTurn    = true; }
+    void clearSkipNextTurn()       { skipNextTurn    = false; }
+    bool isRegenSuppressed() const { return regenSuppressed; }
+    void suppressRegen()           { regenSuppressed = true; }
     std::string getDialogue() const;
     std::string getDescription() const;
 
     // Status effects
     void applyBleed();
-    void applyPoison(int stacks = 5);  // resets to stacks (does not add)
+    void clearBleed();                 // Bloodburst: consume bleed
+    void applyPoison(int stacks = 5);  // adds stacks
+    void clearPoison();                // Toxic Bloom: cash out all poison
     void applyBlind(int rounds = 3);
     bool isBleeding()          const;
     bool isPoisoned()          const;

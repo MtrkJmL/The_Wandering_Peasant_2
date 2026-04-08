@@ -5,14 +5,16 @@
 #include "ChapterMap.h"
 #include "RunState.h"
 #include "Quest.h"
+#include "Discoveries.h"
 #include <memory>
 #include <random>
 
 class Game {
 private:
-    Player    player;
-    RunState  runState;
-    bool      isRunning;
+    Player      player;
+    RunState    runState;
+    Discoveries discoveries;
+    bool        isRunning;
     std::mt19937 rng;
 
     // ── Menus ──────────────────────────────────────────────────
@@ -44,7 +46,7 @@ private:
     void enemyAttackTurnBoss(Boss& boss);
     void showCombatStatus(const Enemy& enemy) const;
     void showCombatStatusBoss(const Boss& boss) const;
-    int  runTimingBar(bool isHeavy, int& outCritPos); // returns cursor pos
+    int  runTimingBar(bool isHeavy, int& outCritPos, int critWidthBonus = 0);
 
     // ── Potion / bargain UI ────────────────────────────────────
     void potionMenu(Enemy* enemy = nullptr); // null = out of combat
@@ -62,11 +64,16 @@ private:
     void showTutorial();
     void gameOver();
     void showQuestLog() const;
+    void showDiscoveries();
+
+    // ── Persistence ────────────────────────────────────────────
+    void saveDiscoveries();
 
     // ── Utility ────────────────────────────────────────────────
     void clearScreen() const;
     void pressEnter()  const;
     void slowPrint(const std::string& text, int delayMs = 18) const;
+    void slowPrintSkippable(const std::string& text, int delayMs, bool& skipped) const;
     int  randInt(int lo, int hi);          // inclusive
 
 public:

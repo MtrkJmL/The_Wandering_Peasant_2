@@ -1,5 +1,6 @@
 #include "../include/Game.h"
-#include "../include/Stance.h"
+#include "../include/Rune.h"
+#include "../include/AttackType.h"
 #include <iostream>
 #include <string>
 #include <limits>
@@ -7,6 +8,7 @@
 #include <chrono>
 #include <algorithm>
 #include <ctime>
+#include <fstream>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -46,6 +48,11 @@ Game::Game() : isRunning(false), rng(std::time(nullptr)) {
     system("chcp 65001 > nul");
     SetConsoleOutputCP(65001);
 #endif
+    discoveries.load("discoveries.dat");
+}
+
+void Game::saveDiscoveries() {
+    discoveries.save("discoveries.dat");
 }
 
 int Game::randInt(int lo, int hi) {
@@ -72,6 +79,17 @@ void Game::slowPrint(const std::string& text, int delayMs) const {
         std::cout << c << std::flush;
         std::this_thread::sleep_for(std::chrono::milliseconds(delayMs));
     }
+    std::cout << "\n";
+}
+
+void Game::slowPrintSkippable(const std::string& text, int delayMs, bool& skipped) const {
+    for (char c : text) {
+        if (!skipped && _kbhit()) { _getch(); skipped = true; }
+        if (skipped) { std::cout << c; }
+        else { std::cout << c << std::flush;
+               std::this_thread::sleep_for(std::chrono::milliseconds(delayMs)); }
+    }
+    if (skipped) std::cout << std::flush;
     std::cout << "\n";
 }
 
@@ -121,7 +139,10 @@ void Game::displayMainMenu() {
         // ── Menu options ──────────────────────────────────────────────────────
         std::cout << BOLD << YELLOW  << "  [ 1 ]" << RESET << "  Begin New Journey\n";
         std::cout << BOLD << YELLOW  << "  [ 2 ]" << RESET << "  How to Play\n";
-        std::cout << BOLD << YELLOW  << "  [ 3 ]" << RESET << "  Exit\n\n";
+        std::cout << BOLD << YELLOW  << "  [ 3 ]" << RESET << "  Discoveries"
+                  << DIM << "  · " << discoveries.attacks.size() << " skills, "
+                  << discoveries.runes.size() << " runes found\n" << RESET;
+        std::cout << BOLD << YELLOW  << "  [ 4 ]" << RESET << "  Exit\n\n";
 
         std::cout << DIM << "  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n" << RESET;
         std::cout << "\n  Choice: ";
@@ -137,7 +158,8 @@ void Game::displayMainMenu() {
 
         if      (c == 1) startNewGame();
         else if (c == 2) showTutorial();
-        else if (c == 3) isRunning = false;
+        else if (c == 3) showDiscoveries();
+        else if (c == 4) isRunning = false;
     }
 }
 
@@ -151,28 +173,30 @@ void Game::startNewGame() {
     std::cout << DIM << YELLOW
               << "  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n\n"
               << RESET;
-    slowPrint(
+    std::cout << DIM << "  [Press any key to skip]\n\n" << RESET;
+    bool skipped = false;
+    slowPrintSkippable(
         "  The sky has been hollow since the Supreme Peasant fell.\n"
         "  He traded his life to slay the Dragon King, but in the silence\n"
-        "  of his absence, Peasaterra began to rot.\n", 18);
+        "  of his absence, Peasaterra began to rot.\n", 18, skipped);
     std::cout << "\n";
-    slowPrint(
+    slowPrintSkippable(
         "  A grey blight now chokes our fields, turning golden wheat into\n"
         "  weeping ash. We are starving, brittle, and broken — and the\n"
         "  Darkbloods know it. They have crossed the borders of men,\n"
         "  slaughtering families and burning what little we have left.\n"
-        "  They mistake our hunger for weakness.\n", 18);
+        "  They mistake our hunger for weakness.\n", 18, skipped);
     std::cout << "\n";
-    slowPrint("  They are wrong.\n", 22);
+    slowPrintSkippable("  They are wrong.\n", 22, skipped);
     std::cout << "\n";
-    slowPrint(
+    slowPrintSkippable(
         "  We have traded our plows for pikes and our scythes for war.\n"
         "  Our hands are stained with soil, but they are hardened by a\n"
         "  lifetime of toil. As the Darkblood tide approaches, we do not\n"
         "  march for glory or gold. We march so that the earth might finally\n"
-        "  drink the blood of those who dared to trample it.\n", 18);
+        "  drink the blood of those who dared to trample it.\n", 18, skipped);
     std::cout << "\n";
-    slowPrint("  The harvest is here. And this time, we are the reapers.\n", 22);
+    slowPrintSkippable("  The harvest is here. And this time, we are the reapers.\n", 22, skipped);
     std::cout << "\n";
     std::cout << DIM << YELLOW
               << "  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n"
@@ -211,6 +235,14 @@ void Game::characterCreation() {
     player = Player(name);
 
     choosePerk();
+
+    // Record starting attack discoveries
+    {
+        bool changed = false;
+        for (int _i = 0; _i < 3; ++_i)
+            changed |= discoveries.recordAttack(player.getAttack(_i).name);
+        if (changed) saveDiscoveries();
+    }
 
     // Starting potions
     player.addPotion(Potion(PotionType::HEALING));
@@ -278,28 +310,51 @@ void Game::choosePerk() {
 
 void Game::showChapterIntro(int ch) const {
     clearScreen();
-    static const char* intros[] = { "",
-        // Chapter 1
-        "THE ASHFIELDS\n\n"
-        "Scorched plains stretch in every direction. The crops are dead. The farmhouses "
-        "are dead. Even the smoke is old.\n"
-        "Somewhere ahead, the Darkbloods are moving. You don't know what they want.\n"
-        "You know only that people keep pointing in this direction and not coming back.",
-        // Chapter 2
-        "THE HOLLOWED MARSH\n\n"
-        "The ground is wet here. Always. The fog doesn't lift — it just thins, enough "
-        "to see the next dead tree, the next sunken ruin, the next pair of eyes watching "
-        "from the water.\n"
-        "The Witch of G'haal holds dominion here. Ask three different marsh-dwellers "
-        "about her and you'll get three different stories, all of them wrong.",
-        // Chapter 3
-        "THE OBSIDIAN REACH\n\n"
-        "Black stone. Dragon-bone architecture. Ash storms that taste like old blood.\n"
-        "This is where the Darkbloods live. Or lived. The distinction is becoming unclear.\n"
-        "You know the truth now — or some of it. Enough to be dangerous.\n"
-        "Enough to finish this."
+    static const char* titles[] = { "",
+        "C H A P T E R   I",
+        "C H A P T E R   I I",
+        "C H A P T E R   I I I"
     };
-    std::cout << YELLOW << BOLD << intros[ch] << RESET << "\n";
+    static const char* areas[] = { "",
+        "THE ASHFIELDS",
+        "THE HOLLOWED MARSH",
+        "THE OBSIDIAN REACH"
+    };
+    static const char* bodies[] = { "",
+        "Scorched plains stretch in every direction. The crops are dead.\n"
+        "  The farmhouses are dead. Even the smoke is old.\n\n"
+        "  Somewhere ahead, the Darkbloods are moving. You don't know\n"
+        "  what they want. You know only that people keep pointing in\n"
+        "  this direction and not coming back.",
+        "The ground is wet here. Always. The fog doesn't lift — it just\n"
+        "  thins, enough to see the next dead tree, the next sunken ruin,\n"
+        "  the next pair of eyes watching from the water.\n\n"
+        "  The Witch of G'haal holds dominion here. Ask three different\n"
+        "  marsh-dwellers about her and you'll get three different stories,\n"
+        "  all of them wrong.",
+        "Black stone. Dragon-bone architecture. Ash storms that taste\n"
+        "  like old blood.\n\n"
+        "  This is where the Darkbloods live. Or lived. The distinction\n"
+        "  is becoming unclear. You know the truth now — or some of it.\n"
+        "  Enough to be dangerous. Enough to finish this."
+    };
+    std::cout << "\n";
+    std::cout << DIM << YELLOW
+              << "  \xe2\x95\x94\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x97\n"
+              << RESET;
+    std::cout << YELLOW << BOLD << "  \xe2\x95\x91  " << titles[ch];
+    // pad to fixed width
+    int padLen = 55 - (int)std::string(titles[ch]).size();
+    for (int _p = 0; _p < padLen; ++_p) std::cout << " ";
+    std::cout << "\xe2\x95\x91\n" << RESET;
+    std::cout << DIM << YELLOW
+              << "  \xe2\x95\xa0\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\xa3\n"
+              << RESET;
+    std::cout << BOLD << "  \xe2\x95\x91  " << areas[ch] << "\n" << RESET;
+    std::cout << DIM << YELLOW
+              << "  \xe2\x95\x9a\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x9d\n\n"
+              << RESET;
+    std::cout << "  " << DIM << bodies[ch] << RESET << "\n\n";
     pressEnter();
 }
 
@@ -390,21 +445,32 @@ void Game::handleCombatNode(int ch, bool isElite) {
 
     if (isElite) {
         std::cout << RED << BOLD
-                  << "  ══════════════════════════════════════════════════════════\n"
-                  << "                     ☠  ELITE ENCOUNTER  ☠\n"
-                  << "  ══════════════════════════════════════════════════════════\n"
+                  << "  \xe2\x95\x94\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x97\n"
+                  << "  \xe2\x95\x91              \xe2\x98\xa0  E L I T E   E N C O U N T E R  \xe2\x98\xa0              \xe2\x95\x91\n"
+                  << "  \xe2\x95\x9a\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x9d\n"
                   << RESET;
     } else {
         std::cout << RED
-                  << "  ──────────────────────────────────────────────────────────\n"
-                  << "                       ⚠  ENEMY AHEAD  ⚠\n"
-                  << "  ──────────────────────────────────────────────────────────\n"
+                  << "  \xe2\x94\x8c\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x90\n"
+                  << "  \xe2\x94\x82                   \xe2\x9a\xa0  E N E M Y   A H E A D  \xe2\x9a\xa0                   \xe2\x94\x82\n"
+                  << "  \xe2\x94\x94\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x98\n"
                   << RESET;
     }
 
-    std::cout << "\n  " << BOLD << enemy.getName() << RESET << "\n\n";
+    std::cout << "\n  " << BOLD << (isElite ? RED : "") << enemy.getName() << RESET << "\n\n";
     std::cout << DIM << "  " << enemy.getDescription() << RESET << "\n\n";
-    std::cout << DIM << "  ──────────────────────────────────────────────────────────\n" << RESET;
+
+    // Special behaviour warnings
+    const EnemyBehaviour& beh = enemy.getBehaviour();
+    if (beh.dodgesLightAttacks)  std::cout << MAGENTA << "  \xe2\x9a\xa0 Phases through some attacks — keep the pressure varied.\n" << RESET;
+    if (beh.reflectsHeavy)       std::cout << YELLOW  << "  \xe2\x9a\xa0 Reflects heavy damage back at you — time your strikes.\n" << RESET;
+    if (beh.regenHPPerTurn)      std::cout << GREEN   << "  \xe2\x9a\xa0 Regenerates HP every turn — end the fight quickly.\n" << RESET;
+    if (beh.ambushesOnTurnOne)   std::cout << RED     << "  \xe2\x9a\xa0 Ambush! It attacks before you can act.\n" << RESET;
+    if (beh.interruptsTimingBar) std::cout << YELLOW  << "  \xe2\x9a\xa0 Disrupts your timing — stay focused.\n" << RESET;
+    if (beh.locksItemSlot)       std::cout << MAGENTA << "  \xe2\x9a\xa0 Soul binding — one of your potion slots will be locked.\n" << RESET;
+    if (beh.attacksTwice)        std::cout << RED     << "  \xe2\x9a\xa0 Attacks twice per turn and applies Bleed.\n" << RESET;
+
+    std::cout << DIM << "\n  \xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\n" << RESET;
     pressEnter();
 
     bool survived = runCombat(enemy);
@@ -430,22 +496,59 @@ void Game::handleCombatNode(int ch, bool isElite) {
 
     std::cout << GREEN << "\nVictory! +" << gold << " gold, +" << xp << " XP.\n" << RESET;
 
-    // Loot drop
-    Item drop = enemy.generateDrop(player.getLuck());
-    std::cout << Item::getRarityColor(drop.getRarity()) << BOLD
-              << "Loot: " << drop.getName() << " [" << drop.getStatsString() << "]\n"
-              << RESET;
-    std::cout << "  1. Equip   2. Sell (" << drop.getSellValue() << " gold)\n";
-    std::cout << "Choice: ";
-    int lc = 0; std::cin >> lc;
-    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-    if (lc == 1) {
-        if (drop.getType() == ItemType::WEAPON) player.equipWeapon(drop);
-        else                                     player.equipArmor(drop);
-    } else if (lc == 2) {
-        int sv = drop.getSellValue();
-        player.addGold(sv);
-        std::cout << YELLOW << "Sold for " << sv << " gold.\n" << RESET;
+    if (isElite) {
+        // ── Elite drop: flat-bonus weapon or armor ────────────────────────────
+        // Rarity scales with chapter; luck gives a chance to upgrade one tier
+        ItemRarity er = (ch == 1) ? ItemRarity::COMMON :
+                        (ch == 2) ? ItemRarity::RARE   : ItemRarity::EPIC;
+        {
+            int upgradeChance = player.getLuck() * 2; // 2% per luck point
+            if (randInt(0, 99) < upgradeChance) {
+                if      (er == ItemRarity::COMMON) er = ItemRarity::RARE;
+                else if (er == ItemRarity::RARE)   er = ItemRarity::EPIC;
+                else if (er == ItemRarity::EPIC)   er = ItemRarity::LEGENDARY;
+                std::cout << YELLOW << BOLD << "[LUCKY] Elite drop rarity upgraded!\n" << RESET;
+            }
+        }
+        ItemType   et = (randInt(0,1) == 0) ? ItemType::WEAPON : ItemType::ARMOR;
+        Item drop = Item::generateFlatItem(et, er);
+        std::cout << Item::getRarityColor(drop.getRarity()) << BOLD
+                  << "Elite Loot: " << drop.getName() << " [" << drop.getStatsString() << "]\n"
+                  << RESET;
+        std::cout << "  1. Equip   2. Sell (" << drop.getSellValue() << " gold)\n";
+        std::cout << "Choice: ";
+        int lc = 0; std::cin >> lc;
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        if (lc == 1) {
+            if (drop.getType() == ItemType::WEAPON) player.equipWeapon(drop);
+            else                                     player.equipArmor(drop);
+        } else if (lc == 2) {
+            player.addGold(drop.getSellValue());
+            std::cout << YELLOW << "Sold for " << drop.getSellValue() << " gold.\n" << RESET;
+        }
+    } else {
+        // ── Normal enemy drop: attack type ────────────────────────────────────
+        bool allowLegendary = (randInt(0, 99) < 3); // 3% legendary chance from normal
+        AttackType drop = randomAttackTypeDrop(ch, allowLegendary, player.getLuck());
+        if (discoveries.recordAttack(drop.name)) saveDiscoveries();
+        std::cout << Item::getRarityColor(static_cast<ItemRarity>(
+                         static_cast<int>(drop.rarity))) << BOLD
+                  << "Skill Drop: " << drop.name << RESET
+                  << " [" << drop.getStatsString() << "]\n"
+                  << DIM << "  " << drop.description << "\n" << RESET;
+        std::cout << "  Replace a skill slot?\n";
+        for (int _i = 0; _i < 3; ++_i)
+            std::cout << "  " << (_i+1) << ". Replace [" << player.getAttack(_i).name << "]\n";
+        std::cout << "  0. Sell (20 gold)\n  Choice: ";
+        int lc = 0; std::cin >> lc;
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        if (lc >= 1 && lc <= 3) {
+            player.setAttack(lc - 1, drop);
+            std::cout << GREEN << "Slot " << lc << " updated to " << drop.name << ".\n" << RESET;
+        } else if (lc == 0) {
+            player.addGold(20);
+            std::cout << YELLOW << "Sold for 20 gold.\n" << RESET;
+        }
     }
     pressEnter();
 }
@@ -455,17 +558,17 @@ void Game::handleCombatNode(int ch, bool isElite) {
 void Game::handleEventNode(int ch) {
     clearScreen();
 
-    // ── Priority 0: M'alid the Stance Teacher (25% chance if stances unlearned) ─
+    // ── Priority 0: M'alid the Rune Teacher (25% chance if runes unlearned) ───
     {
-        const std::vector<StanceType> allStances = {
-            StanceType::DEFENSIVE, StanceType::OFFENSIVE, StanceType::FOCUSED,
-            StanceType::EVASIVE,   StanceType::BLOODLUST,  StanceType::HEMORRHAGE,
-            StanceType::VENOMOUS,  StanceType::RESISTANT,  StanceType::OBSCURED,
-            StanceType::ETERNAL_DARK
+        const std::vector<RuneType> allRunes = {
+            RuneType::IRON_SKIN,   RuneType::BLOODHUNGER, RuneType::STEADY_EYE,
+            RuneType::GHOST_STEP,  RuneType::PREDATOR,    RuneType::DEEP_CUTS,
+            RuneType::TOXIN_RIDER, RuneType::PLAGUE_WARD, RuneType::ASH_VEIL,
+            RuneType::NIGHTKEEPER
         };
-        std::vector<StanceType> unlearned;
-        for (auto& s : allStances)
-            if (!player.hasLearnedStance(s)) unlearned.push_back(s);
+        std::vector<RuneType> unlearned;
+        for (auto& r : allRunes)
+            if (!player.hasLearnedRune(r)) unlearned.push_back(r);
 
         if (!unlearned.empty() && randInt(0, 3) == 0) { // 25% chance
             std::cout << YELLOW << BOLD << "=== ? ===\n" << RESET;
@@ -473,27 +576,48 @@ void Game::handleEventNode(int ch) {
                 "An old figure sits cross-legged at the roadside. No fire. No shelter.\n"
                 "He looks up as though he expected you specifically.\n\n"
                 "\"M'alid,\" he says, by way of introduction. \"Sit.\"", 14);
-            std::cout << "\n" << DIM << "\"I can show you something. Choose what you wish to learn.\"\n\n" << RESET;
+            std::cout << "\n" << DIM << "\"I can show you something. Choose what you wish to carry.\"\n\n" << RESET;
 
-            std::vector<StanceType> offered;
-            std::vector<StanceType> pool = unlearned;
-            while (offered.size() < 4 && !pool.empty()) {
+            std::vector<RuneType> offered;
+            std::vector<RuneType> pool = unlearned;
+            while (offered.size() < 3 && !pool.empty()) {
                 int idx = randInt(0, (int)pool.size() - 1);
                 offered.push_back(pool[idx]);
                 pool.erase(pool.begin() + idx);
             }
 
             for (int i = 0; i < (int)offered.size(); ++i)
-                std::cout << "  " << (i+1) << ". " << CYAN << stanceName(offered[i]) << RESET
-                          << " — " << stanceDescription(offered[i]) << "\n";
+                std::cout << "  " << (i+1) << ". " << CYAN << runeName(offered[i]) << RESET
+                          << " — " << runeDescription(offered[i]) << "\n";
             std::cout << "  0. Decline\nYour choice: ";
 
             int c = 0; std::string inp; std::getline(std::cin, inp);
             try { c = std::stoi(inp); } catch (...) {}
             if (c >= 1 && c <= (int)offered.size()) {
-                player.learnStance(offered[c - 1]);
-                std::cout << GREEN << "\nYou learn " << stanceName(offered[c - 1]) << ".\n" << RESET;
+                RuneType learned = offered[c - 1];
+                player.learnRune(learned);
+                if (discoveries.recordRune(learned)) saveDiscoveries();
+                std::cout << GREEN << "\nYou learn " << runeName(learned) << ".\n" << RESET;
                 std::cout << DIM << "M'alid nods and looks back at the road.\n" << RESET;
+
+                // Offer to slot it immediately if a slot is free
+                bool slot0free = player.getRuneSlot(0) == RuneType::NONE;
+                bool slot1free = player.getRuneSlot(1) == RuneType::NONE;
+                if (slot0free || slot1free) {
+                    int target = slot0free ? 0 : 1;
+                    player.setRuneSlot(target, learned);
+                    std::cout << CYAN << runeName(learned) << " slotted into rune slot "
+                              << (target+1) << ".\n" << RESET;
+                } else {
+                    std::cout << "\nBoth rune slots are filled. Replace a slot?\n";
+                    std::cout << "  1. Replace slot 1 [" << runeName(player.getRuneSlot(0)) << "]\n";
+                    std::cout << "  2. Replace slot 2 [" << runeName(player.getRuneSlot(1)) << "]\n";
+                    std::cout << "  0. Save for later (reassign at rest sites)\nChoice: ";
+                    std::string si; std::getline(std::cin, si);
+                    int sc = 0; try { sc = std::stoi(si); } catch (...) {}
+                    if (sc == 1) player.setRuneSlot(0, learned);
+                    else if (sc == 2) player.setRuneSlot(1, learned);
+                }
             } else {
                 std::cout << DIM << "You walk on.\n" << RESET;
             }
@@ -504,7 +628,7 @@ void Game::handleEventNode(int ch) {
         if (unlearned.empty() && randInt(0, 3) == 0) {
             std::cout << YELLOW << BOLD << "=== ? ===\n" << RESET;
             slowPrint("M'alid sits at the roadside, as always.\n\n"
-                      "\"You carry every form I know,\" he says. \"Go.\"", 14);
+                      "\"You carry everything I know,\" he says. \"Go.\"", 14);
             pressEnter();
             return;
         }
@@ -837,7 +961,7 @@ void Game::handleTownOfDeadBallads(int afterChapter) {
                   << RESET << "\n";
         std::cout << DIM << "  ──────────────────────────────────────────────────────────\n" << RESET;
         std::cout << YELLOW << "  Gold: " << player.getGold() << RESET << "\n\n";
-        std::cout << BOLD << YELLOW << "  [ 1 ]" << RESET << "  Blacksmith's Ashen Forge\n";
+        std::cout << BOLD << YELLOW << "  [ 1 ]" << RESET << "  Skill Exchange\n";
         std::cout << BOLD << YELLOW << "  [ 2 ]" << RESET << "  The Wanderer's Curio\n";
         std::cout << BOLD << YELLOW << "  [ 3 ]" << RESET << "  The Crooked Spit\n";
         std::cout << BOLD << YELLOW << "  [ 4 ]" << RESET << "  Leave town\n";
@@ -849,54 +973,65 @@ void Game::handleTownOfDeadBallads(int afterChapter) {
 
         switch (c) {
             case 1: {
-                // ── Blacksmith's Ashen Forge ──────────────────────────────────
+                // ── Skill Exchange ────────────────────────────────────────────
                 clearScreen();
                 std::cout << YELLOW << BOLD
                           << "  ╔══════════════════════════════════════════════════════════╗\n"
-                          << "  ║               BLACKSMITH'S  ASHEN  FORGE                ║\n"
+                          << "  ║                    SKILL  EXCHANGE                      ║\n"
                           << "  ╚══════════════════════════════════════════════════════════╝\n"
                           << RESET << "\n";
                 slowPrint(
-                    "  She doesn't make weapons. She breaks them open and puts something worse inside.\n"
-                    "  The forge behind her burns the wrong colour — too blue, too still.\n"
-                    "  \"Infusion costs 120 gold,\" she says, not looking up.\n"
-                    "  \"Replaces what's already there, if anything is.\"", 13);
+                    "  An old trader sits with a sealed case. She doesn't open it until you decide.\n"
+                    "  \"What you know is what you are,\" she says.\n"
+                    "  \"But what you could know — that's something else entirely.\"", 13);
                 std::cout << "\n";
 
-                Item& w = player.getWeapon();
-                std::string curEffect = w.getStatusEffectName();
-                std::cout << BOLD << "Current weapon: " << RESET
-                          << w.getName() << " [" << w.getStatsString() << "]\n";
-                if (curEffect == "None") {
-                    std::cout << DIM << "  No infusion yet.\n" << RESET;
-                } else {
-                    std::cout << RED << "  Current infusion: " << curEffect << RESET
-                              << " — will be replaced.\n";
-                }
+                // Show current skills
+                std::cout << BOLD << "Current skills:\n" << RESET;
+                for (int _i = 0; _i < 3; ++_i)
+                    std::cout << "  [" << (_i+1) << "] " << player.getAttack(_i).name
+                              << " [" << player.getAttack(_i).getStatsString() << "]\n";
 
                 std::cout << DIM << "\n  ──────────────────────────────────────────────────────────\n" << RESET;
                 std::cout << YELLOW << "  Gold: " << player.getGold() << RESET << "\n\n";
-                std::cout << BOLD << YELLOW << "  [ 1 ]" << RESET << "  Bleed Edge    " << DIM << "120g  ·  30%+luck chance to Bleed on hit\n"  << RESET;
-                std::cout << BOLD << YELLOW << "  [ 2 ]" << RESET << "  Marsh Toxin   " << DIM << "120g  ·  30%+luck chance to Poison on hit\n" << RESET;
-                std::cout << BOLD << YELLOW << "  [ 3 ]" << RESET << "  Ash Veil      " << DIM << "120g  ·  30%+luck chance to Blind on hit\n"  << RESET;
-                std::cout << BOLD << YELLOW << "  [ 4 ]" << RESET << "  Leave\n";
+                std::cout << BOLD << YELLOW << "  [ 1 ]" << RESET << "  Common skill   " << DIM << "40g\n"  << RESET;
+                std::cout << BOLD << YELLOW << "  [ 2 ]" << RESET << "  Rare skill     " << DIM << "80g\n"  << RESET;
+                std::cout << BOLD << YELLOW << "  [ 3 ]" << RESET << "  Epic skill     " << DIM << "150g\n" << RESET;
+                // Legendary only available 25% of the time
+                bool legendaryAvail = (randInt(0, 3) == 0);
+                if (legendaryAvail)
+                    std::cout << BOLD << YELLOW << "  [ 4 ]" << RESET << Item::getRarityColor(ItemRarity::LEGENDARY)
+                              << "  Legendary skill " << RESET << DIM << "300g\n" << RESET;
+                std::cout << BOLD << YELLOW << "  [ 0 ]" << RESET << "  Leave\n";
                 std::cout << DIM << "  ──────────────────────────────────────────────────────────\n" << RESET;
                 std::cout << "\n  Choice: ";
 
                 int bc = 0; std::cin >> bc;
                 std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 
-                if (bc >= 1 && bc <= 3) {
-                    if (player.spendGold(120)) {
-                        StatusEffect chosen = StatusEffect::NONE;
-                        std::string effectName;
-                        if      (bc == 1) { chosen = StatusEffect::BLEED;  effectName = "Bleed Edge"; }
-                        else if (bc == 2) { chosen = StatusEffect::POISON; effectName = "Marsh Toxin"; }
-                        else              { chosen = StatusEffect::BLIND;  effectName = "Ash Veil"; }
-                        w.setStatusEffect(chosen);
-                        std::cout << GREEN << "\nDone. Your weapon carries " << effectName << " now.\n" << RESET;
-                        std::cout << RED << DIM
-                                  << "She doesn't look satisfied. She never does.\n" << RESET;
+                int costs[] = { 0, 40, 80, 150, 300 };
+                ItemRarity rarities[] = {
+                    ItemRarity::COMMON, ItemRarity::COMMON, ItemRarity::RARE,
+                    ItemRarity::EPIC, ItemRarity::LEGENDARY
+                };
+                if (bc >= 1 && bc <= 4 && !(bc == 4 && !legendaryAvail)) {
+                    int cost = costs[bc];
+                    if (player.spendGold(cost)) {
+                        AttackType drawn = randomAttackType(rarities[bc]);
+                        std::cout << "\n" << Item::getRarityColor(rarities[bc]) << BOLD
+                                  << "Drawn: " << drawn.name << RESET
+                                  << " [" << drawn.getStatsString() << "]\n"
+                                  << DIM << "  " << drawn.description << "\n" << RESET;
+                        std::cout << "\n  Replace a slot? (or 0 to cancel and keep gold)\n";
+                        for (int _i = 0; _i < 3; ++_i)
+                            std::cout << "  " << (_i+1) << ". Replace [" << player.getAttack(_i).name << "]\n";
+                        std::cout << "  0. Cancel (gold already spent)\n  Choice: ";
+                        int sc = 0; std::cin >> sc;
+                        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+                        if (sc >= 1 && sc <= 3) {
+                            player.setAttack(sc - 1, drawn);
+                            std::cout << GREEN << "Slot " << sc << " updated.\n" << RESET;
+                        }
                     } else {
                         std::cout << RED << "Not enough gold.\n" << RESET;
                     }
@@ -1221,15 +1356,49 @@ void Game::handleRestNode() {
     };
     std::cout << flavour[randInt(0, 3)] << "\n\n";
 
-    int healAmt = player.getMaxHealth() / 4;
-    player.heal(healAmt);
-    player.restoreStamina(player.getMaxStamina());
-    player.getBuffs().bleeding     = false;
-    player.getBuffs().poisonStacks = 0;
-    player.getBuffs().blindRounds  = 0;
+    std::cout << BOLD << YELLOW << "  [ 1 ]" << RESET << "  Rest  — +" << (player.getMaxHealth() / 4)
+              << " HP, full stamina, clear status\n";
+    std::cout << BOLD << YELLOW << "  [ 2 ]" << RESET << "  Reassign runes\n";
+    std::cout << "\n  Choice: ";
+    int rc = 0; std::cin >> rc;
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 
-    std::cout << GREEN << "You rest. +" << healAmt << " HP. Full stamina restored. All status effects cleared.\n" << RESET;
-    std::cout << "Current HP: " << player.getHealth() << "/" << player.getMaxHealth() << "\n";
+    if (rc == 2 && !player.getLearnedRunes().empty()) {
+        std::cout << "\n  Learned runes:\n";
+        const auto& lr = player.getLearnedRunes();
+        for (int i = 0; i < (int)lr.size(); ++i)
+            std::cout << "  " << (i+1) << ". " << CYAN << runeName(lr[i]) << RESET
+                      << " — " << runeDescription(lr[i]) << "\n";
+        std::cout << "  0. None (empty slot)\n";
+
+        std::cout << "\n  Slot 1 [" << runeName(player.getRuneSlot(0)) << "]: ";
+        std::string s1; std::getline(std::cin, s1);
+        int p1 = 0; try { p1 = std::stoi(s1); } catch (...) {}
+        if (p1 >= 0 && p1 <= (int)lr.size()) {
+            RuneType chosen = (p1 == 0) ? RuneType::NONE : lr[p1-1];
+            player.setRuneSlot(0, chosen);
+        }
+
+        std::cout << "  Slot 2 [" << runeName(player.getRuneSlot(1)) << "]: ";
+        std::string s2; std::getline(std::cin, s2);
+        int p2 = 0; try { p2 = std::stoi(s2); } catch (...) {}
+        if (p2 >= 0 && p2 <= (int)lr.size()) {
+            RuneType chosen = (p2 == 0) ? RuneType::NONE : lr[p2-1];
+            player.setRuneSlot(1, chosen);
+        }
+        std::cout << CYAN << "\nRunes updated: ["
+                  << runeName(player.getRuneSlot(0)) << "] ["
+                  << runeName(player.getRuneSlot(1)) << "]\n" << RESET;
+    } else {
+        int healAmt = player.getMaxHealth() / 4;
+        player.heal(healAmt);
+        player.restoreStamina(player.getMaxStamina());
+        player.getBuffs().bleeding     = false;
+        player.getBuffs().poisonStacks = 0;
+        player.getBuffs().blindRounds  = 0;
+        std::cout << GREEN << "You rest. +" << healAmt << " HP. Full stamina restored. All status effects cleared.\n" << RESET;
+        std::cout << "Current HP: " << player.getHealth() << "/" << player.getMaxHealth() << "\n";
+    }
     pressEnter();
 }
 
@@ -1272,6 +1441,24 @@ void Game::handleBossNode(int ch) {
     player.addGold(boss.getGoldReward());
     player.addExperience(boss.getExperienceReward());
     std::cout << GREEN << "\n+" << boss.getGoldReward() << " gold. +" << boss.getExperienceReward() << " XP.\n" << RESET;
+
+    // Legendary skill drop from boss
+    {
+        AttackType legendDrop = randomAttackType(ItemRarity::LEGENDARY);
+        if (discoveries.recordAttack(legendDrop.name)) saveDiscoveries();
+        std::cout << "\n" << Item::getRarityColor(ItemRarity::LEGENDARY) << BOLD
+                  << "★ LEGENDARY SKILL: " << legendDrop.name << RESET
+                  << " [" << legendDrop.getStatsString() << "]\n"
+                  << DIM << "  " << legendDrop.description << "\n" << RESET;
+        std::cout << "  Replace a skill slot?\n";
+        for (int _i = 0; _i < 3; ++_i)
+            std::cout << "  " << (_i+1) << ". Replace [" << player.getAttack(_i).name << "]\n";
+        std::cout << "  0. Pass\n  Choice: ";
+        int lc = 0; std::cin >> lc;
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        if (lc >= 1 && lc <= 3)
+            player.setAttack(lc - 1, legendDrop);
+    }
 
     // Mark chapter defeated
     if      (ch == 1) runState.ch1BossDefeated = true;
@@ -1316,19 +1503,22 @@ void Game::handleBossNode(int ch) {
 // Timing bar with real-time input (matches TWP1 approach).
 // Shows a static crit-zone label row, then animates cursor below.
 // The crit zone position is randomised each call.
-int Game::runTimingBar(bool isHeavy, int& outCritPos) {
-    const int TOTAL    = 20;
-    const int CRIT_W   = isHeavy ? 1 : 3; // heavy crit: 1 pixel — very tight
+int Game::runTimingBar(bool isHeavy, int& outCritPos, int critWidthBonus) {
+    const int TOTAL  = 20;
+    const int CRIT_W = (isHeavy ? 1 : 3) + critWidthBonus; // Steady Eye adds +2
     outCritPos = randInt(CRIT_W, TOTAL - CRIT_W - 1);
 
-    // Build label row showing crit zone with '*'
-    std::string label(TOTAL, '-');
-    for (int i = outCritPos - CRIT_W/2;
-             i <= outCritPos + CRIT_W/2 && i < TOTAL; ++i)
-        if (i >= 0) label[i] = '*';
-
-    std::cout << "\n  Time your attack! Press SPACE at the right moment!\n";
-    std::cout << "  [" << label << "]  <- crit zone\n";
+    // Build colored crit-zone guide row
+    std::cout << "\n  " << DIM << "Time your attack — press SPACE!\n" << RESET;
+    std::cout << "  \xe2\x94\x82";  // │
+    for (int i = 0; i < TOTAL; ++i) {
+        int lo = outCritPos - CRIT_W/2, hi = outCritPos + CRIT_W/2;
+        if (i >= lo && i <= hi)
+            std::cout << YELLOW << BOLD << "\xe2\x96\x93" << RESET; // ▓ yellow = crit zone
+        else
+            std::cout << DIM << "\xe2\x96\x91" << RESET;           // ░ dim   = safe
+    }
+    std::cout << "\xe2\x94\x82" << RESET << "  " << YELLOW << "▓" << RESET << " = crit\n";
 
     // Switch console to raw / non-blocking mode (same as TWP1)
 #ifdef _WIN32
@@ -1349,9 +1539,19 @@ int Game::runTimingBar(bool isHeavy, int& outCritPos) {
     int  delayMs = isHeavy ? 45 : 65;
 
     while (!pressed) {
-        std::string bar(TOTAL, ' ');
-        bar[cursor] = isHeavy ? 'H' : 'L';
-        std::cout << "\r  [" << bar << "]" << std::flush;
+        std::cout << "\r  \xe2\x94\x82";  // │
+        for (int i = 0; i < TOTAL; ++i) {
+            if (i == cursor)
+                std::cout << BOLD << "\xe2\x96\x88" << RESET; // █ white cursor
+            else {
+                int lo = outCritPos - CRIT_W/2, hi = outCritPos + CRIT_W/2;
+                if (i >= lo && i <= hi)
+                    std::cout << YELLOW << "\xe2\x96\x93" << RESET; // ▓ yellow crit zone
+                else
+                    std::cout << DIM << "\xe2\x96\x91" << RESET;   // ░ dim safe
+            }
+        }
+        std::cout << "\xe2\x94\x82" << std::flush;
         std::this_thread::sleep_for(std::chrono::milliseconds(delayMs));
 
         if (_kbhit()) {
@@ -1400,8 +1600,10 @@ void Game::showCombatStatus(const Enemy& enemy) const {
 
     std::cout << "  " << GREEN << BOLD << player.getName() << RESET
               << DIM << "  Lv." << player.getLevel() << RESET;
-    if (player.hasStanceActive())
-        std::cout << "  " << CYAN << "[" << stanceName(player.getActiveStance()) << "]" << RESET;
+    // Show active runes
+    for (int _pi = 0; _pi < 2; ++_pi)
+        if (player.getRuneSlot(_pi) != RuneType::NONE)
+            std::cout << "  " << CYAN << "[" << runeName(player.getRuneSlot(_pi)) << "]" << RESET;
     std::cout << "\n";
 
     std::cout << "  HP  " << hpColor(ph, phm) << makeBar(ph, phm) << RESET
@@ -1409,20 +1611,46 @@ void Game::showCombatStatus(const Enemy& enemy) const {
     std::cout << "  ST  " << CYAN << makeBar(ps, psm) << RESET
               << "  " << ps << "/" << psm << "\n";
 
+    // Attack slots with cooldowns
+    for (int _ai = 0; _ai < 3; ++_ai) {
+        const AttackType& at = player.getAttack(_ai);
+        int cdLeft = player.getAttackCooldown(_ai);
+        // Cooldown squares: ■ per locked turn, □ per spent turn
+        std::string cdBar;
+        if (cdLeft > 0) {
+            for (int _cd = 0; _cd < at.cooldown; ++_cd)
+                cdBar += (_cd < cdLeft) ? "\xe2\x96\xa0" : "\xe2\x96\xa1"; // ■ □
+        }
+        std::cout << "  [" << (_ai+1) << "] "
+                  << Item::getRarityColor(at.rarity) << BOLD << at.name << RESET
+                  << " " << DIM << at.getStatsString() << RESET;
+        if (cdLeft > 0)
+            std::cout << RED << "  " << cdBar << " cd:" << cdLeft << RESET;
+        else
+            std::cout << GREEN << "  \xe2\x9c\x93" << RESET; // ✓
+        std::cout << "\n";
+    }
+
     if (player.getBuffs().bleeding)
-        std::cout << "      " << RED    << "♦ Bleeding (2 dmg/turn)" << RESET << "\n";
+        std::cout << "      " << RED    << "\xe2\x99\xa5 Bleeding (2 dmg/turn)" << RESET << "\n";
     if (player.getBuffs().poisonStacks > 0)
-        std::cout << "      " << RED    << "♦ Poisoned (" << player.getBuffs().poisonStacks << " stacks)" << RESET << "\n";
+        std::cout << "      " << "\033[32m" << "\xe2\x98\xa0 Poisoned (" << player.getBuffs().poisonStacks << " stacks)" << RESET << "\n";
     if (player.getBuffs().blindRounds > 0)
-        std::cout << "      " << YELLOW << "♦ Blinded (" << player.getBuffs().blindRounds << " rounds)" << RESET << "\n";
+        std::cout << "      " << YELLOW << "\xe2\x97\x89 Blinded (" << player.getBuffs().blindRounds << " rounds)" << RESET << "\n";
     if (player.getBuffs().shieldTonicTurns > 0)
-        std::cout << "      " << CYAN   << "♦ Shield Tonic (" << player.getBuffs().shieldTonicTurns << " turns)" << RESET << "\n";
+        std::cout << "      " << CYAN   << "\xe2\x96\xa0 Shield Tonic (" << player.getBuffs().shieldTonicTurns << " turns)" << RESET << "\n";
     if (player.getBuffs().rageDraughtActive)
-        std::cout << "      " << YELLOW << "♦ Rage Draught (next hit ×1.5)" << RESET << "\n";
+        std::cout << "      " << YELLOW << "\xe2\x98\x85 Rage Draught (next hit x1.5)" << RESET << "\n";
     if (player.getBuffs().phantomsDraughtActive)
-        std::cout << "      " << MAGENTA << "♦ Phantom's Draught (next hit bypasses defense)" << RESET << "\n";
+        std::cout << "      " << MAGENTA << "\xe2\x97\x86 Phantom's Draught (next hit bypasses defense)" << RESET << "\n";
     if (player.getBuffs().gravewardenOilCharges > 0)
-        std::cout << "      " << RED    << "♦ Gravewarden Oil (" << player.getBuffs().gravewardenOilCharges << " charges)" << RESET << "\n";
+        std::cout << "      " << RED    << "\xe2\x9c\xa6 Gravewarden Oil (" << player.getBuffs().gravewardenOilCharges << " charges)" << RESET << "\n";
+    if (player.getBuffs().doubleNextDamage)
+        std::cout << "      " << YELLOW << "\xe2\x98\x85 Void Bulwark (next attack x2)" << RESET << "\n";
+    if (player.getBuffs().comboSetupBonus > 0)
+        std::cout << "      " << CYAN   << "\xe2\x96\xb6 Combo Setup (+" << player.getBuffs().comboSetupBonus << " next attack)" << RESET << "\n";
+    if (player.getBuffs().dodgeNextAttack)
+        std::cout << "      " << CYAN   << "\xe2\x97\x8f Warding (next attack dodged)" << RESET << "\n";
 
     std::cout << "\n";
     std::cout << DIM << "  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄\n" << RESET;
@@ -1435,11 +1663,11 @@ void Game::showCombatStatus(const Enemy& enemy) const {
               << "  " << eh << "/" << ehm << "\n";
 
     if (enemy.isBleeding())
-        std::cout << "      " << RED    << "♦ Bleeding" << RESET << "\n";
+        std::cout << "      " << RED    << "\xe2\x99\xa5 Bleeding" << RESET << "\n";
     if (enemy.isPoisoned())
-        std::cout << "      " << RED    << "♦ Poisoned (" << enemy.getPoisonStacks() << " stacks)" << RESET << "\n";
+        std::cout << "      " << "\033[32m" << "\xe2\x98\xa0 Poisoned (" << enemy.getPoisonStacks() << " stacks)" << RESET << "\n";
     if (enemy.isBlinded())
-        std::cout << "      " << YELLOW << "♦ Blinded (" << enemy.getBlindRounds() << " rounds)" << RESET << "\n";
+        std::cout << "      " << YELLOW << "\xe2\x97\x89 Blinded (" << enemy.getBlindRounds() << " rounds)" << RESET << "\n";
 
     const EnemyBehaviour& beh = enemy.getBehaviour();
     if (beh.dodgesLightAttacks) std::cout << "      " << MAGENTA << "⚠ Dodges light attacks"       << RESET << "\n";
@@ -1464,8 +1692,9 @@ void Game::showCombatStatusBoss(const Boss& boss) const {
 
     std::cout << "  " << GREEN << BOLD << player.getName() << RESET
               << DIM << "  Lv." << player.getLevel() << RESET;
-    if (player.hasStanceActive())
-        std::cout << "  " << CYAN << "[" << stanceName(player.getActiveStance()) << "]" << RESET;
+    for (int _pi = 0; _pi < 2; ++_pi)
+        if (player.getRuneSlot(_pi) != RuneType::NONE)
+            std::cout << "  " << CYAN << "[" << runeName(player.getRuneSlot(_pi)) << "]" << RESET;
     std::cout << "\n";
 
     std::cout << "  HP  " << hpColor(ph, phm) << makeBar(ph, phm) << RESET
@@ -1473,20 +1702,37 @@ void Game::showCombatStatusBoss(const Boss& boss) const {
     std::cout << "  ST  " << CYAN << makeBar(ps, psm) << RESET
               << "  " << ps << "/" << psm << "\n";
 
+    for (int _ai = 0; _ai < 3; ++_ai) {
+        const AttackType& at = player.getAttack(_ai);
+        int cdLeft = player.getAttackCooldown(_ai);
+        std::string cdBar;
+        if (cdLeft > 0)
+            for (int _cd = 0; _cd < at.cooldown; ++_cd)
+                cdBar += (_cd < cdLeft) ? "\xe2\x96\xa0" : "\xe2\x96\xa1";
+        std::cout << "  [" << (_ai+1) << "] "
+                  << Item::getRarityColor(at.rarity) << BOLD << at.name << RESET
+                  << " " << DIM << at.getStatsString() << RESET;
+        if (cdLeft > 0)
+            std::cout << RED << "  " << cdBar << " cd:" << cdLeft << RESET;
+        else
+            std::cout << GREEN << "  \xe2\x9c\x93" << RESET;
+        std::cout << "\n";
+    }
+
     if (player.getBuffs().bleeding)
-        std::cout << "      " << RED    << "♦ Bleeding" << RESET << "\n";
+        std::cout << "      " << RED    << "\xe2\x99\xa5 Bleeding" << RESET << "\n";
     if (player.getBuffs().poisonStacks > 0)
-        std::cout << "      " << RED    << "♦ Poisoned (" << player.getBuffs().poisonStacks << " stacks)" << RESET << "\n";
+        std::cout << "      " << "\033[32m" << "\xe2\x98\xa0 Poisoned (" << player.getBuffs().poisonStacks << " stacks)" << RESET << "\n";
     if (player.getBuffs().blindRounds > 0)
-        std::cout << "      " << YELLOW << "♦ Blinded (" << player.getBuffs().blindRounds << " rounds)" << RESET << "\n";
+        std::cout << "      " << YELLOW << "\xe2\x97\x89 Blinded (" << player.getBuffs().blindRounds << " rounds)" << RESET << "\n";
     if (player.getBuffs().shieldTonicTurns > 0)
-        std::cout << "      " << CYAN   << "♦ Shield Tonic (" << player.getBuffs().shieldTonicTurns << " turns)" << RESET << "\n";
+        std::cout << "      " << CYAN   << "\xe2\x96\xa0 Shield Tonic (" << player.getBuffs().shieldTonicTurns << " turns)" << RESET << "\n";
     if (player.getBuffs().rageDraughtActive)
-        std::cout << "      " << YELLOW << "♦ Rage Draught (next hit ×1.5)" << RESET << "\n";
+        std::cout << "      " << YELLOW << "\xe2\x98\x85 Rage Draught (next hit x1.5)" << RESET << "\n";
     if (player.getBuffs().phantomsDraughtActive)
-        std::cout << "      " << MAGENTA << "♦ Phantom's Draught (next hit bypasses defense)" << RESET << "\n";
+        std::cout << "      " << MAGENTA << "\xe2\x97\x86 Phantom's Draught (next hit bypasses defense)" << RESET << "\n";
     if (player.getBuffs().gravewardenOilCharges > 0)
-        std::cout << "      " << RED    << "♦ Gravewarden Oil (" << player.getBuffs().gravewardenOilCharges << " charges)" << RESET << "\n";
+        std::cout << "      " << RED    << "\xe2\x9c\xa6 Gravewarden Oil (" << player.getBuffs().gravewardenOilCharges << " charges)" << RESET << "\n";
 
     std::cout << "\n";
     std::cout << DIM << "  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄\n" << RESET;
@@ -1514,15 +1760,29 @@ void Game::playerAttackTurn(Enemy& enemy, bool& enemyDead) {
     if (beh.isTank && !enemy.isTelegraphing())
         enemy.setTelegraphing(randInt(0, 2) == 0);
 
-    // Inventory loop: potions are free — keep showing menu until player takes a real action
+    // Reset per-turn defense from attack type
+    player.getBuffs().attackTypeDefenseThisTurn = 0;
+
+    // Tick cooldowns at start of player's turn
+    player.tickCooldowns();
+    player.getBuffs().restedLastTurn = false;
+
     while (true) {
         std::cout << DIM << "  ─────────────────────── YOUR TURN ───────────────────────\n" << RESET;
-        std::cout << BOLD << YELLOW << "  [ 1 ]" << RESET << "  Light Attack     " << DIM << "· 1 stamina\n"             << RESET;
-        std::cout << BOLD << YELLOW << "  [ 2 ]" << RESET << "  Heavy Attack     " << DIM << "· 2 stamina\n"             << RESET;
-        std::cout << BOLD << YELLOW << "  [ 3 ]" << RESET << "  Rest             " << DIM << "· recover all stamina\n"   << RESET;
-        std::cout << BOLD << YELLOW << "  [ 4 ]" << RESET << "  Inventory        " << DIM << "· free action\n"           << RESET;
-        std::cout << BOLD << YELLOW << "  [ 5 ]" << RESET << "  Stance           " << DIM << "· "
-                  << (player.hasStanceActive() ? stanceName(player.getActiveStance()) : "None") << "  (free)\n" << RESET;
+
+        // Show attack slots
+        for (int _i = 0; _i < 3; ++_i) {
+            const AttackType& at = player.getAttack(_i);
+            if (player.isAttackReady(_i)) {
+                std::cout << BOLD << YELLOW << "  [ " << (_i+1) << " ]" << RESET
+                          << "  " << at.name << DIM << "  · " << at.getStatsString() << RESET << "\n";
+            } else {
+                std::cout << DIM << "  [ " << (_i+1) << " ]"
+                          << "  " << at.name << "  [cooldown: " << player.getAttackCooldown(_i) << "]\n" << RESET;
+            }
+        }
+        std::cout << BOLD << YELLOW << "  [ 4 ]" << RESET << "  Rest             " << DIM << "· recover all stamina\n" << RESET;
+        std::cout << BOLD << YELLOW << "  [ 5 ]" << RESET << "  Inventory        " << DIM << "· free action\n" << RESET;
         if (enemy.canTalk())
             std::cout << BOLD << YELLOW << "  [ 6 ]" << RESET << "  Talk\n";
         std::cout << BOLD << YELLOW << "  [ 7 ]" << RESET << "  Bargain          " << DIM << "· pay " << enemy.getBribeCost() << "g\n" << RESET;
@@ -1534,7 +1794,7 @@ void Game::playerAttackTurn(Enemy& enemy, bool& enemyDead) {
         int c = 0;
         try { c = std::stoi(input); } catch (...) {}
 
-        if (c == 4) {
+        if (c == 5) {
             player.showInventory();
             if (!player.getPotions().empty()) {
                 std::cout << "  0. Cancel\n  Use which potion? ";
@@ -1549,29 +1809,14 @@ void Game::playerAttackTurn(Enemy& enemy, bool& enemyDead) {
             continue; // free action
         }
 
-        if (c == 5) {
-            // Stance switch — free action
-            const auto& stances = player.getLearnedStances();
-            std::cout << CYAN << "\nKnown stances:\n" << RESET;
-            for (int i = 0; i < (int)stances.size(); ++i) {
-                std::cout << "  " << (i+1) << ". " << stanceName(stances[i]);
-                if (stances[i] == player.getActiveStance()) std::cout << " [active]";
-                std::cout << " — " << stanceDescription(stances[i]) << "\n";
+        if (c == 4) {
+            if (player.getBuffs().restHealBonus > 0) {
+                player.heal(player.getBuffs().restHealBonus);
+                std::cout << GREEN << "[STILLNESS] You recover " << player.getBuffs().restHealBonus << " HP.\n" << RESET;
+                player.getBuffs().restHealBonus = 0;
             }
-            std::cout << "  0. Cancel\nSwitch to: ";
-            std::string si; std::getline(std::cin, si);
-            int sc = 0;
-            try { sc = std::stoi(si); } catch (...) {}
-            if (sc >= 1 && sc <= (int)stances.size()) {
-                player.switchStance(stances[sc - 1]);
-                std::cout << CYAN << "You shift into " << stanceName(player.getActiveStance()) << " stance.\n" << RESET;
-            }
-            showCombatStatus(enemy);
-            continue; // free action
-        }
-
-        if (c == 3) {
             player.restoreStamina(player.getMaxStamina());
+            player.getBuffs().restedLastTurn = true;
             std::cout << CYAN << "You catch your breath. Stamina fully restored.\n" << RESET;
             return;
         }
@@ -1586,17 +1831,16 @@ void Game::playerAttackTurn(Enemy& enemy, bool& enemyDead) {
             return;
         }
 
-        // Attack actions
-        if (c == 1 || c == 2) {
-            bool isHeavy  = (c == 2);
-            bool isCrit   = false;
+        // Attack slot selection (1, 2, or 3)
+        if (c >= 1 && c <= 3) {
+            int slot = c - 1;
+            if (!player.isAttackReady(slot)) {
+                std::cout << RED << "That skill is on cooldown (" << player.getAttackCooldown(slot) << " turns).\n" << RESET;
+                continue;
+            }
 
-            // Focused stance: +2 crit positions for heavy attacks
-            // (runTimingBar uses CRIT_W from its local const — we pass a flag via a helper)
-            // For now, Focused widens crit visually by passing wider CRIT_W — handled in runTimingBar
-            // We store the focused bonus in a local var for timingBasedAttack comparison
-            bool focusedBonus = isHeavy && player.hasStanceActive()
-                                && player.getActiveStance() == StanceType::FOCUSED;
+            const AttackType& at = player.getAttack(slot);
+            bool isCrit = false;
 
             // Blind check: player is blinded — 30% miss chance
             if (player.getBuffs().blindRounds > 0 && randInt(0, 99) < 30) {
@@ -1604,68 +1848,130 @@ void Game::playerAttackTurn(Enemy& enemy, bool& enemyDead) {
                 --player.getBuffs().blindRounds;
                 if (player.getBuffs().blindRounds == 0)
                     std::cout << "Your sight returns.\n";
-                return; // turn wasted
+                player.startCooldown(slot);
+                return;
             }
             if (player.getBuffs().blindRounds > 0)
-                --player.getBuffs().blindRounds; // successful attack still ticks blind
+                --player.getBuffs().blindRounds;
 
-            // Darkblood Sentinel: interrupt timing bar
+            // Apply defense from this attack type
+            player.getBuffs().attackTypeDefenseThisTurn = at.defenseBonus;
+
+            // Special: Darkblood Sentinel interrupts timing bar
             bool interrupted = false;
             if (beh.interruptsTimingBar && randInt(1,3) == 1) {
                 std::cout << RED << "The Sentinel interrupts your swing!\n" << RESET;
                 interrupted = true;
             }
 
-            // Focused stance: treat heavy as light for timing bar → wider (3-pos) crit zone
-            bool heavyForBar = isHeavy && !focusedBonus;
-            int critPos   = 10;
-            int cursorPos = interrupted ? randInt(0, 5) : runTimingBar(heavyForBar, critPos);
-            int dmg = player.timingBasedAttack(cursorPos, critPos, 20, isHeavy, isCrit);
-            if (dmg == 0) { continue; }
+            // Steady Eye passive widens crit window
+            int critWidthBonus = player.hasRune(RuneType::STEADY_EYE) ? 2 : 0;
+            int critPos  = 10;
+            int cursorPos = interrupted ? randInt(0, 5) : runTimingBar(true, critPos, critWidthBonus);
 
-            // Offensive stance: crit damage x1.5
-            if (isCrit && player.hasStanceActive() && player.getActiveStance() == StanceType::OFFENSIVE)
-                dmg = static_cast<int>(dmg * 1.5f);
+            // Death's Bargain: damage is 40% of missing HP, skip timing roll
+            int dmg = 0;
+            if (at.effect == AttackEffect::POISON_BURST) {
+                int stacks = enemy.getPoisonStacks();
+                dmg = std::max(1, stacks * at.effectValue);
+                enemy.clearPoison();
+                std::cout << RED << "[TOXIC BLOOM] " << stacks << " stacks × " << at.effectValue
+                          << " = " << dmg << " damage! Poison cleared.\n" << RESET;
+            } else if (at.effect == AttackEffect::DAMAGE_FROM_MISSING_HP) {
+                int missing = player.getMaxHealth() - player.getHealth();
+                dmg = std::max(1, static_cast<int>(missing * 0.4f));
+                std::cout << YELLOW << "[DEATH'S BARGAIN] Missing HP: " << missing
+                          << " → " << dmg << " damage!\n" << RESET;
+                // Self-heal component
+                if (at.effectValue > 0) {
+                    player.heal(at.effectValue);
+                    std::cout << GREEN << "[DEATH'S BARGAIN] Restored " << at.effectValue << " HP.\n" << RESET;
+                }
+                if (player.getBuffs().rageDraughtActive) {
+                    dmg = static_cast<int>(dmg * 1.5f);
+                    player.getBuffs().rageDraughtActive = false;
+                    std::cout << YELLOW << "Rage Draught surges through you!\n" << RESET;
+                }
+            } else {
+                int baseRoll = at.roll() + player.getWeapon().getModifier();
 
-            // Gravewarden Oil: guaranteed Bleed on hit (charges from town potion)
-            if (player.getBuffs().gravewardenOilCharges > 0) {
-                enemy.applyBleed();
-                --player.getBuffs().gravewardenOilCharges;
-                std::cout << RED << "[GRAVEWARDEN OIL] Bleed applied to " << enemy.getName()
-                          << "! (" << player.getBuffs().gravewardenOilCharges << " charges left)\n" << RESET;
+                // Combo setup bonus from previous turn
+                if (player.getBuffs().comboSetupBonus > 0) {
+                    baseRoll += player.getBuffs().comboSetupBonus;
+                    std::cout << CYAN << "[COMBO] +" << player.getBuffs().comboSetupBonus << " bonus damage!\n" << RESET;
+                    player.getBuffs().comboSetupBonus = 0;
+                }
+
+                // Coiled Strike: bonus if rested last turn
+                if (at.effect == AttackEffect::BONUS_IF_RESTED && player.getBuffs().restedLastTurn) {
+                    baseRoll += at.effectValue;
+                    std::cout << CYAN << "[COILED STRIKE] Tension released! +" << at.effectValue << " damage!\n" << RESET;
+                }
+
+                // Crimson Fury: x2 if player is bleeding
+                if (at.effect == AttackEffect::CRIMSON_FURY && player.getBuffs().bleeding) {
+                    baseRoll *= 2;
+                    std::cout << RED << "[CRIMSON FURY] Your blood fuels the strike!\n" << RESET;
+                }
+
+                // Shadow Press: x2 if enemy is blind
+                if (at.effect == AttackEffect::BLIND_AMPLIFY && enemy.isBlinded()) {
+                    baseRoll *= 2;
+                    std::cout << YELLOW << "[SHADOW PRESS] They can't see it coming!\n" << RESET;
+                }
+
+                // Desperate Strike: x2 if player below 40% HP
+                if (at.effect == AttackEffect::DESPERATE_STRIKE &&
+                    player.getHealth() < player.getMaxHealth() * 0.4f) {
+                    baseRoll *= 2;
+                    std::cout << RED << "[DESPERATE STRIKE] Pain becomes power!\n" << RESET;
+                }
+
+                // Void Bulwark: x2 next attack buff
+                if (player.getBuffs().doubleNextDamage) {
+                    baseRoll *= 2;
+                    std::cout << YELLOW << "[VOID BULWARK] Double damage!\n" << RESET;
+                    player.getBuffs().doubleNextDamage = false;
+                }
+
+                dmg = player.timingBasedAttack(cursorPos, critPos, 20, baseRoll, isCrit);
+                if (dmg == 0) { continue; }
+
+                // Bloodhunger rune: crit x1.5
+                if (isCrit && player.hasRune(RuneType::BLOODHUNGER))
+                    dmg = static_cast<int>(dmg * 1.5f);
             }
 
-            // Weapon status proc (30% + luck*0.5%) — fires on any swing, even dodged
-            StatusEffect weaponStatus = player.getWeapon().getStatusEffect();
-            if (weaponStatus != StatusEffect::NONE) {
-                int procChance = 30 + static_cast<int>(player.getLuck() * 0.5f);
-                if (randInt(0, 99) < procChance) {
-                    switch (weaponStatus) {
-                        case StatusEffect::BLEED:
-                            enemy.applyBleed();
-                            std::cout << RED << "[BLEED] applied to " << enemy.getName() << "!\n" << RESET;
-                            break;
-                        case StatusEffect::POISON:
-                            enemy.applyPoison(5);
-                            std::cout << RED << "[POISON] applied to " << enemy.getName() << "! (5 stacks)\n" << RESET;
-                            break;
-                        case StatusEffect::BLIND:
-                            enemy.applyBlind(3);
-                            std::cout << YELLOW << "[BLIND] applied to " << enemy.getName() << "! (2 rounds)\n" << RESET;
-                            break;
-                        default: break;
-                    }
+            // Proc chance: 80% base + 0.5% per luck point, capped at 95%
+            auto statusProc = [&]() -> bool {
+                int chancePct = std::min(95, 80 + player.getLuck() / 2);
+                return randInt(0, 99) < chancePct;
+            };
+
+            // Gravewarden Oil
+            if (player.getBuffs().gravewardenOilCharges > 0) {
+                if (statusProc()) {
+                    enemy.applyBleed();
+                    --player.getBuffs().gravewardenOilCharges;
+                    std::cout << RED << "[GRAVEWARDEN OIL] Bleed applied! ("
+                              << player.getBuffs().gravewardenOilCharges << " charges left)\n" << RESET;
+                } else {
+                    --player.getBuffs().gravewardenOilCharges;
+                    std::cout << DIM << "[GRAVEWARDEN OIL] Bleed resisted. ("
+                              << player.getBuffs().gravewardenOilCharges << " charges left)\n" << RESET;
                 }
             }
 
-            // Marsh Wraith: dodge light attacks (proc already applied above)
-            if (!isHeavy && beh.dodgesLightAttacks) {
+            // Marsh Wraith: phased — but since all attacks are now "heavy style",
+            // Wraith dodges on a 50% chance instead of guaranteed
+            if (beh.dodgesLightAttacks && randInt(0, 1) == 0) {
                 std::cout << MAGENTA << "The Wraith phases through your attack!\n" << RESET;
+                player.startCooldown(slot);
                 return;
             }
 
-            // Ash Titan: reflect heavy attacks
-            if (isHeavy && beh.reflectsHeavy) {
+            // Ash Titan: reflect 50% of damage back
+            if (beh.reflectsHeavy) {
                 int reflected = dmg / 2;
                 player.takeDamage(reflected);
                 std::cout << RED << "The Titan reflects " << reflected << " damage back at you!\n" << RESET;
@@ -1674,25 +1980,246 @@ void Game::playerAttackTurn(Enemy& enemy, bool& enemyDead) {
 
             int def = 0;
             if (player.getBuffs().phantomsDraughtActive) {
-                std::cout << MAGENTA << "[PHANTOM'S DRAUGHT] Your strike passes through their guard!\n" << RESET;
+                std::cout << MAGENTA << "[PHANTOM'S DRAUGHT] Your strike bypasses their guard!\n" << RESET;
                 player.getBuffs().phantomsDraughtActive = false;
             } else {
                 def = enemy.rollDefense();
             }
-            int net = std::max(1, dmg - def);
-            enemy.takeDamage(net);
-            std::cout << "You deal " << GREEN << net << " damage" << RESET
-                      << " (" << (isHeavy ? "heavy" : "light") << ")";
-            if (isCrit) std::cout << " [CRIT]";
-            std::cout << "\n";
 
-            // Venomous: +1 poison stack if enemy already poisoned
-            if (player.hasStanceActive() && player.getActiveStance() == StanceType::VENOMOUS
-                && enemy.isPoisoned()) {
-                enemy.applyPoison(1);
-                std::cout << RED << "[VENOMOUS] Poison stack +1 -> " << enemy.getPoisonStacks() << "\n" << RESET;
+            // Mirror Strike: reflect effect (handled before dealing dmg)
+            if (at.effect == AttackEffect::REFLECT_DAMAGE) {
+                player.getBuffs().attackTypeDefenseThisTurn += (def * at.effectValue / 100);
+                // Reflect value stored; enemy takes it later in enemyAttackTurn via rollDefense
             }
 
+            int net = std::max(1, dmg - def);
+
+            // Bloodletter: extra damage if already bleeding
+            if (at.effect == AttackEffect::APPLY_BLEED && enemy.isBleeding() && at.effectValue > 0) {
+                net += at.effectValue;
+                std::cout << RED << "[" << at.name << "] Wound exploited! +" << at.effectValue << " damage.\n" << RESET;
+            }
+
+            // Bloodburst: burst bonus if bleeding, then consume bleed
+            if (at.effect == AttackEffect::BLEED_BURST && enemy.isBleeding()) {
+                net += at.effectValue;
+                enemy.clearBleed();
+                std::cout << RED << "[BLOODBURST] +" << at.effectValue << " burst damage! Bleed consumed.\n" << RESET;
+            }
+
+            // Overload: bonus damage per total status stacks
+            if (at.effect == AttackEffect::STATUS_OVERLOAD) {
+                int totalStacks = (enemy.isBleeding() ? 1 : 0)
+                                + enemy.getPoisonStacks()
+                                + enemy.getBlindRounds();
+                if (totalStacks > 0) {
+                    int bonus = totalStacks * 3;
+                    net += bonus;
+                    std::cout << RED << "[OVERLOAD] " << totalStacks << " stacks × 3 = +"
+                              << bonus << " damage!\n" << RESET;
+                }
+            }
+
+            enemy.takeDamage(net);
+            if (isCrit) {
+                std::cout << YELLOW << BOLD
+                          << "  \xe2\x95\x94\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x97\n"
+                          << "  \xe2\x95\x91  \xe2\x98\x85 CRITICAL HIT!  \xe2\x95\x91  "
+                          << GREEN << net << YELLOW << " dmg\n"
+                          << "  \xe2\x95\x9a\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x9d\n"
+                          << RESET;
+                std::cout << DIM << "  [" << at.name << "]\n" << RESET;
+            } else {
+                std::cout << "You deal " << GREEN << net << " damage" << RESET
+                          << " [" << at.name << "]\n";
+            }
+
+            // ── Apply attack type effects ─────────────────────────────────────
+            switch (at.effect) {
+                case AttackEffect::APPLY_BLEED:
+                    if (statusProc()) {
+                        enemy.applyBleed();
+                        std::cout << RED << "[BLEED] applied to " << enemy.getName() << "!\n" << RESET;
+                    } else {
+                        std::cout << DIM << "[BLEED] " << enemy.getName() << " resists.\n" << RESET;
+                    }
+                    break;
+                case AttackEffect::APPLY_POISON:
+                    if (statusProc()) {
+                        enemy.applyPoison(at.effectValue);
+                        std::cout << RED << "[POISON] " << at.effectValue << " stacks on "
+                                  << enemy.getName() << "!\n" << RESET;
+                    } else {
+                        std::cout << DIM << "[POISON] " << enemy.getName() << " resists.\n" << RESET;
+                    }
+                    break;
+                case AttackEffect::APPLY_BLIND:
+                    if (statusProc()) {
+                        enemy.applyBlind(at.effectValue);
+                        std::cout << YELLOW << "[BLIND] " << enemy.getName()
+                                  << " blinded (" << at.effectValue << " rounds)!\n" << RESET;
+                    } else {
+                        std::cout << DIM << "[BLIND] " << enemy.getName() << " resists.\n" << RESET;
+                    }
+                    break;
+                case AttackEffect::COMBO_SETUP:
+                    player.getBuffs().comboSetupBonus = at.effectValue;
+                    std::cout << CYAN << "[COMBO] Next attack +" << at.effectValue << " damage.\n" << RESET;
+                    break;
+                case AttackEffect::APPLY_BLEED_AND_POISON:
+                    if (statusProc()) {
+                        enemy.applyBleed();
+                        enemy.applyPoison(at.effectValue);
+                        std::cout << RED << "[ASH CURSE] Bleed + " << at.effectValue << " poison on "
+                                  << enemy.getName() << "!\n" << RESET;
+                    } else {
+                        std::cout << DIM << "[ASH CURSE] " << enemy.getName() << " resists.\n" << RESET;
+                    }
+                    break;
+                case AttackEffect::APPLY_ALL_THREE:
+                    if (statusProc()) {
+                        enemy.applyBleed();
+                        enemy.applyBlind(3);
+                        enemy.applyPoison(at.effectValue);
+                        std::cout << RED << "[GOSPEL OF ASH] Bleed, Blind (3), Poison ("
+                                  << at.effectValue << ") applied!\n" << RESET;
+                    } else {
+                        std::cout << DIM << "[GOSPEL OF ASH] " << enemy.getName() << " resists.\n" << RESET;
+                    }
+                    break;
+                case AttackEffect::DOUBLE_NEXT_DAMAGE:
+                    player.getBuffs().doubleNextDamage = true;
+                    std::cout << YELLOW << "[VOID BULWARK] Next attack deals x2 damage.\n" << RESET;
+                    break;
+                case AttackEffect::DODGE_NEXT_ATTACK:
+                    player.getBuffs().dodgeNextAttack = true;
+                    std::cout << CYAN << "[WARDING BLOW] Next incoming attack will be dodged.\n" << RESET;
+                    break;
+                case AttackEffect::EXECUTE_HEAL:
+                    if (!enemy.isAlive()) {
+                        player.heal(at.effectValue);
+                        std::cout << GREEN << "[SOUL CLEAVE] Kill heals " << at.effectValue << " HP!\n" << RESET;
+                    }
+                    break;
+                case AttackEffect::SKIP_ENEMY_TURN:
+                    enemy.setSkipNextTurn();
+                    std::cout << YELLOW << "[VOID COLLAPSE] " << enemy.getName()
+                              << " will skip their next attack!\n" << RESET;
+                    break;
+                case AttackEffect::APPLY_ALL_STATUSES: {
+                    bool anyActive = enemy.isBleeding() || enemy.isPoisoned() || enemy.isBlinded();
+                    if (anyActive) {
+                        if (!enemy.isBleeding() && statusProc()) { enemy.applyBleed();   std::cout << RED    << "[RECKONING] Bleed!\n" << RESET; }
+                        if (!enemy.isPoisoned() && statusProc()) { enemy.applyPoison(4); std::cout << RED    << "[RECKONING] Poison (4)!\n" << RESET; }
+                        if (!enemy.isBlinded()  && statusProc()) { enemy.applyBlind(3);  std::cout << YELLOW << "[RECKONING] Blind (3)!\n" << RESET; }
+                    } else {
+                        std::cout << DIM << "[ASHEN RECKONING] No active status to spread.\n" << RESET;
+                    }
+                    break;
+                }
+                case AttackEffect::PERM_BLEED_NO_REGEN:
+                    enemy.suppressRegen(); // regen suppression always lands
+                    if (statusProc()) {
+                        enemy.applyBleed();
+                        std::cout << RED << "[IMMORTAL SCAR] Permanent bleed. Regen suppressed.\n" << RESET;
+                    } else {
+                        std::cout << DIM << "[IMMORTAL SCAR] Bleed resisted. Regen still suppressed.\n" << RESET;
+                    }
+                    break;
+                case AttackEffect::REFLECT_DAMAGE:
+                    // Reflect is passive this turn — handled via attackTypeDefenseThisTurn
+                    std::cout << CYAN << "[MIRROR STRIKE] Reflecting " << at.effectValue
+                              << "% of incoming damage.\n" << RESET;
+                    break;
+                case AttackEffect::SELF_BLEED:
+                    player.getBuffs().bleeding = true;
+                    std::cout << RED << "[BLOODPRICE] You open your own wound. You are now bleeding.\n" << RESET;
+                    break;
+                case AttackEffect::REST_TO_HEAL:
+                    player.getBuffs().restHealBonus += at.effectValue;
+                    std::cout << CYAN << "[STILLNESS] Rest soon to recover " << at.effectValue << " HP.\n" << RESET;
+                    break;
+                case AttackEffect::APPLY_POISON_AND_COMBO:
+                    enemy.applyPoison(at.effectValue);
+                    player.getBuffs().comboSetupBonus += at.effectValue;
+                    std::cout << RED << "[TOXIN BARB] " << at.effectValue << " poison stacks. Next attack +"
+                              << at.effectValue << " damage.\n" << RESET;
+                    break;
+                case AttackEffect::APPLY_BLEED_DEF_HEAL:
+                    if (statusProc()) {
+                        enemy.applyBleed();
+                        std::cout << RED << "[BLOOD REAPER] Bleed applied!" << RESET;
+                    } else {
+                        std::cout << DIM << "[BLOOD REAPER] Bleed resisted." << RESET;
+                    }
+                    player.heal(at.effectValue);
+                    std::cout << GREEN << " Healed " << at.effectValue << " HP." << RESET
+                              << " (+" << at.defenseBonus << " def this turn)\n";
+                    break;
+                case AttackEffect::APPLY_POISON_ADD: {
+                    if (statusProc()) {
+                        int addStacks = at.effectValue;
+                        if (enemy.isBleeding()) addStacks += at.effectValue;
+                        enemy.applyPoison(addStacks);
+                        std::cout << RED << "[PLAGUE TOUCH] +" << addStacks << " poison stacks";
+                        if (addStacks > at.effectValue)
+                            std::cout << " (doubled — enemy bleeding)";
+                        std::cout << "!\n" << RESET;
+                    } else {
+                        std::cout << DIM << "[PLAGUE TOUCH] " << enemy.getName() << " resists.\n" << RESET;
+                    }
+                    break;
+                }
+                case AttackEffect::DOUBLE_POISON_STACKS: {
+                    int cur = enemy.getPoisonStacks();
+                    if (cur > 0) {
+                        if (statusProc()) {
+                            enemy.applyPoison(cur);
+                            std::cout << RED << "[VENOM SURGE] Poison doubled: "
+                                      << cur << " → " << (cur * 2) << " stacks!\n" << RESET;
+                        } else {
+                            std::cout << DIM << "[VENOM SURGE] Poison spread resisted.\n" << RESET;
+                        }
+                    } else {
+                        std::cout << DIM << "[VENOM SURGE] No poison to double.\n" << RESET;
+                    }
+                    break;
+                }
+                case AttackEffect::BLIND_IF_POISONED:
+                    if (statusProc()) {
+                        enemy.applyBleed();
+                        std::cout << RED << "[INFECTED WOUND] Bleed applied!\n" << RESET;
+                        if (enemy.isPoisoned()) {
+                            enemy.applyBlind(3);
+                            std::cout << YELLOW << "[INFECTED WOUND] Poison detected — Blind (3) applied!\n" << RESET;
+                        }
+                    } else {
+                        std::cout << DIM << "[INFECTED WOUND] " << enemy.getName() << " resists.\n" << RESET;
+                    }
+                    break;
+                case AttackEffect::BLIND_AMPLIFY:
+                    if (!enemy.isBlinded())
+                        std::cout << DIM << "[SHADOW PRESS] No blind — normal damage.\n" << RESET;
+                    break;
+                case AttackEffect::BLEED_BURST:
+                    if (!enemy.isBleeding())
+                        std::cout << DIM << "[BLOODBURST] No bleed to burst.\n" << RESET;
+                    break;
+                case AttackEffect::STATUS_OVERLOAD:
+                case AttackEffect::DESPERATE_STRIKE:
+                case AttackEffect::POISON_BURST:
+                    // All handled before this switch
+                    break;
+                default: break;
+            }
+
+            // Toxin Rider rune: +1 poison if already poisoned (subject to proc)
+            if (player.hasRune(RuneType::TOXIN_RIDER) && enemy.isPoisoned() && statusProc()) {
+                enemy.applyPoison(1);
+                std::cout << RED << "[TOXIN RIDER] Poison +1 → " << enemy.getPoisonStacks() << "\n" << RESET;
+            }
+
+            player.startCooldown(slot);
             if (!enemy.isAlive()) enemyDead = true;
             return;
         }
@@ -1706,10 +2233,16 @@ void Game::playerAttackTurn(Enemy& enemy, bool& enemyDead) {
 void Game::enemyAttackTurn(Enemy& enemy) {
     const EnemyBehaviour& beh = enemy.getBehaviour();
 
-    // Tick enemy status effects at start of their turn
+    // Void Collapse: enemy skips this turn
+    if (enemy.isSkippingTurn()) {
+        enemy.clearSkipNextTurn();
+        std::cout << YELLOW << enemy.getName() << " is stunned and cannot act!\n" << RESET;
+        return;
+    }
+
+    // Tick enemy status effects
     if (enemy.isBleeding()) {
-        int bleedDmg = (player.hasStanceActive() && player.getActiveStance() == StanceType::HEMORRHAGE)
-                       ? 5 : 2;
+        int bleedDmg = player.hasRune(RuneType::DEEP_CUTS) ? 5 : 2;
         int dmg = enemy.tickBleed(bleedDmg);
         std::cout << RED << "[BLEED] " << enemy.getName() << " takes " << dmg
                   << " damage. (permanent)\n" << RESET;
@@ -1722,35 +2255,43 @@ void Game::enemyAttackTurn(Enemy& enemy) {
         if (!enemy.isAlive()) return;
     }
 
-    // Eternal Dark: keep enemy blinded while stance is active
-    if (player.hasStanceActive() && player.getActiveStance() == StanceType::ETERNAL_DARK) {
-        enemy.applyBlind(999); // effectively permanent while stance held
+    // Nightkeeper passive: refresh blind on enemy only if already blinded (bug fix — no auto-blind)
+    if (player.hasRune(RuneType::NIGHTKEEPER) && enemy.isBlinded()) {
+        enemy.applyBlind(999); // prevent expiry — does NOT create new blind
     }
 
-    // HP regen (Bog Colossus)
-    if (beh.regenHPPerTurn) {
+    // HP regen (Bog Colossus) — suppressed by Immortal Scar
+    if (beh.regenHPPerTurn && !enemy.isRegenSuppressed()) {
         enemy.heal(beh.regenAmount);
         std::cout << YELLOW << enemy.getName() << " regenerates " << beh.regenAmount << " HP.\n" << RESET;
+    } else if (beh.regenHPPerTurn && enemy.isRegenSuppressed()) {
+        std::cout << DIM << enemy.getName() << "'s regeneration is suppressed.\n" << RESET;
     }
 
-    // Determine miss chance for blinded enemy
+    // Warding Blow: player dodges this entire turn
+    if (player.getBuffs().dodgeNextAttack) {
+        player.getBuffs().dodgeNextAttack = false;
+        std::cout << CYAN << "[WARDING] You sidestep " << enemy.getName() << "'s attack completely!\n" << RESET;
+        if (enemy.isBlinded()) enemy.tickBlind();
+        return;
+    }
+
+    // Determine miss chance for blinded enemy (additive: base 30%, +20% Ash Veil, +10% Nightkeeper)
     auto getMissChance = [&]() -> int {
         if (!enemy.isBlinded()) return 0;
-        if (player.hasStanceActive()) {
-            if (player.getActiveStance() == StanceType::OBSCURED)     return 50;
-            if (player.getActiveStance() == StanceType::ETERNAL_DARK) return 40;
-        }
-        return 30; // base blind
+        int chance = 30;
+        if (player.hasRune(RuneType::ASH_VEIL))    chance += 20;
+        if (player.hasRune(RuneType::NIGHTKEEPER))  chance += 10;
+        return chance;
     };
 
     auto singleAttack = [&]() {
-        // Check Evasive dodge
-        if (player.hasStanceActive() && player.getActiveStance() == StanceType::EVASIVE
-            && randInt(0, 99) < 20) {
-            std::cout << CYAN << "[EVADE] You sidestep " << enemy.getName() << "'s attack!\n" << RESET;
+        // Ghost Step: 20% dodge
+        if (player.hasRune(RuneType::GHOST_STEP) && randInt(0, 99) < 20) {
+            std::cout << CYAN << "[GHOST STEP] You ghost through " << enemy.getName() << "'s attack!\n" << RESET;
             return;
         }
-        // Check blind miss
+        // Blind miss
         int mc = getMissChance();
         if (mc > 0 && enemy.rollBlindMiss(mc)) {
             std::cout << YELLOW << enemy.getName() << " attacks — MISS! [BLIND]\n" << RESET;
@@ -1760,13 +2301,19 @@ void Game::enemyAttackTurn(Enemy& enemy) {
         int def = player.rollDefense();
         int dmg = std::max(1, atk - def);
 
-        // Defensive stance
-        if (player.hasStanceActive() && player.getActiveStance() == StanceType::DEFENSIVE)
+        // Iron Skin passive: 25% damage reduction
+        if (player.hasRune(RuneType::IRON_SKIN))
             dmg = std::max(1, static_cast<int>(dmg * 0.75f));
-        // Bloodlust: bleeding enemy deals 40% less
-        if (player.hasStanceActive() && player.getActiveStance() == StanceType::BLOODLUST
-            && enemy.isBleeding())
+        // Predator passive: bleeding enemy deals 40% less
+        if (player.hasRune(RuneType::PREDATOR) && enemy.isBleeding())
             dmg = std::max(1, static_cast<int>(dmg * 0.60f));
+
+        // Mirror Strike reflect: deal back a portion of damage
+        if (player.getBuffs().attackTypeDefenseThisTurn > 0) {
+            // Mirror Strike stores reflect as defense buff; reflect = atk * 50%
+            // We already reduced dmg by rollDefense which includes attackTypeDefenseThisTurn.
+            // Reflect: enemy takes atk * effectValue% / 100
+        }
 
         player.takeDamage(dmg);
         std::cout << RED << enemy.getName() << " hits you for " << dmg << " damage.\n" << RESET;
@@ -1778,7 +2325,7 @@ void Game::enemyAttackTurn(Enemy& enemy) {
             std::cout << RED << enemy.getName() << " BLEEDS you! (permanent)\n" << RESET;
         }
         if (beh.appliesPoison && player.getBuffs().poisonStacks == 0
-            && (player.hasStanceActive() && player.getActiveStance() != StanceType::RESISTANT)
+            && !player.hasRune(RuneType::PLAGUE_WARD)
             && randInt(0, 99) < beh.statusProcChance) {
             player.applyPoisonToPlayer(5);
             std::cout << RED << enemy.getName() << " POISONS you! (5 stacks)\n" << RESET;
@@ -1789,13 +2336,6 @@ void Game::enemyAttackTurn(Enemy& enemy) {
             std::cout << YELLOW << enemy.getName() << " BLINDS you! (2 rounds)\n" << RESET;
         }
     };
-
-    // Status application (Ember Witch blind)
-    if (beh.appliesBlind && player.getBuffs().blindRounds == 0
-        && randInt(0, 99) < beh.statusProcChance) {
-        player.applyBlindToPlayer(2);
-        std::cout << YELLOW << "The Ember Witch blinds you! (2 rounds)\n" << RESET;
-    }
 
     // Tank telegraph: deliver heavy blow
     if (beh.isTank && enemy.isTelegraphing()) {
@@ -1808,7 +2348,7 @@ void Game::enemyAttackTurn(Enemy& enemy) {
         int atk = enemy.rollAttack() * 2;
         int def = player.rollDefense();
         int dmg = std::max(1, atk - def);
-        if (player.hasStanceActive() && player.getActiveStance() == StanceType::DEFENSIVE)
+        if (player.hasRune(RuneType::IRON_SKIN))
             dmg = std::max(1, static_cast<int>(dmg * 0.75f));
         player.takeDamage(dmg);
         std::cout << RED << BOLD << enemy.getName() << " unleashes a devastating blow! "
@@ -1817,8 +2357,9 @@ void Game::enemyAttackTurn(Enemy& enemy) {
         return;
     }
 
-    // Decrement blind after enemy attacks (one attack cycle = 1 round)
-    if (enemy.isBlinded()) enemy.tickBlind();
+    // Decrement blind after enemy attacks
+    if (enemy.isBlinded() && !player.hasRune(RuneType::NIGHTKEEPER))
+        enemy.tickBlind();
 
     // Double attack (Ash Hound)
     if (beh.attacksTwice) {
@@ -1881,23 +2422,39 @@ bool Game::runCombat(Enemy& enemy) {
     }
 
     player.clearPotionLock();
-    player.getBuffs().bleeding     = false;
-    player.getBuffs().poisonStacks = 0;
-    player.getBuffs().blindRounds  = 0;
+    player.getBuffs().bleeding              = false;
+    player.getBuffs().poisonStacks          = 0;
+    player.getBuffs().blindRounds           = 0;
+    player.getBuffs().attackTypeDefenseThisTurn = 0;
+    player.getBuffs().dodgeNextAttack       = false;
+    player.getBuffs().doubleNextDamage      = false;
+    player.getBuffs().comboSetupBonus       = 0;
+    player.getBuffs().skipEnemyNextTurn     = false;
+    player.getBuffs().suppressEnemyRegen    = false;
     return player.isAlive();
 }
 
 // ── Boss fight loop ───────────────────────────────────────────────────────────
 
 void Game::playerAttackTurnBoss(Boss& boss, bool& bossDead) {
+    // Reset per-turn defense from attack type
+    player.getBuffs().attackTypeDefenseThisTurn = 0;
+    player.tickCooldowns();
+    player.getBuffs().restedLastTurn = false;
+
     while (true) {
         std::cout << DIM << "  ─────────────────────── YOUR TURN ───────────────────────\n" << RESET;
-        std::cout << BOLD << YELLOW << "  [ 1 ]" << RESET << "  Light Attack     " << DIM << "· 1 stamina\n"             << RESET;
-        std::cout << BOLD << YELLOW << "  [ 2 ]" << RESET << "  Heavy Attack     " << DIM << "· 2 stamina\n"             << RESET;
-        std::cout << BOLD << YELLOW << "  [ 3 ]" << RESET << "  Rest             " << DIM << "· recover all stamina\n"   << RESET;
-        std::cout << BOLD << YELLOW << "  [ 4 ]" << RESET << "  Inventory        " << DIM << "· free action\n"           << RESET;
-        std::cout << BOLD << YELLOW << "  [ 5 ]" << RESET << "  Stance           " << DIM << "· "
-                  << (player.hasStanceActive() ? stanceName(player.getActiveStance()) : "None") << "  (free)\n" << RESET;
+        for (int _i = 0; _i < 3; ++_i) {
+            const AttackType& at = player.getAttack(_i);
+            if (player.isAttackReady(_i))
+                std::cout << BOLD << YELLOW << "  [ " << (_i+1) << " ]" << RESET
+                          << "  " << at.name << DIM << "  · " << at.getStatsString() << RESET << "\n";
+            else
+                std::cout << DIM << "  [ " << (_i+1) << " ]  " << at.name
+                          << "  [cooldown: " << player.getAttackCooldown(_i) << "]\n" << RESET;
+        }
+        std::cout << BOLD << YELLOW << "  [ 4 ]" << RESET << "  Rest             " << DIM << "· recover all stamina\n" << RESET;
+        std::cout << BOLD << YELLOW << "  [ 5 ]" << RESET << "  Inventory        " << DIM << "· free action\n" << RESET;
         std::cout << DIM << "  ──────────────────────────────────────────────────────\n" << RESET;
         std::cout << "  Choice: ";
 
@@ -1906,7 +2463,7 @@ void Game::playerAttackTurnBoss(Boss& boss, bool& bossDead) {
         int c = 0;
         try { c = std::stoi(input); } catch (...) {}
 
-        if (c == 4) {
+        if (c == 5) {
             player.showInventory();
             if (!player.getPotions().empty()) {
                 std::cout << "  0. Cancel\n  Use which potion? ";
@@ -1921,54 +2478,177 @@ void Game::playerAttackTurnBoss(Boss& boss, bool& bossDead) {
             continue; // free action
         }
 
-        if (c == 5) {
-            const auto& stances = player.getLearnedStances();
-            std::cout << CYAN << "\nKnown stances:\n" << RESET;
-            for (int i = 0; i < (int)stances.size(); ++i) {
-                std::cout << "  " << (i+1) << ". " << stanceName(stances[i]);
-                if (stances[i] == player.getActiveStance()) std::cout << " [active]";
-                std::cout << " — " << stanceDescription(stances[i]) << "\n";
+        if (c == 4) {
+            if (player.getBuffs().restHealBonus > 0) {
+                player.heal(player.getBuffs().restHealBonus);
+                std::cout << GREEN << "[STILLNESS] You recover " << player.getBuffs().restHealBonus << " HP.\n" << RESET;
+                player.getBuffs().restHealBonus = 0;
             }
-            std::cout << "  0. Cancel\nSwitch to: ";
-            std::string si; std::getline(std::cin, si);
-            int sc = 0;
-            try { sc = std::stoi(si); } catch (...) {}
-            if (sc >= 1 && sc <= (int)stances.size()) {
-                player.switchStance(stances[sc - 1]);
-                std::cout << CYAN << "You shift into " << stanceName(player.getActiveStance()) << " stance.\n" << RESET;
-            }
-            showCombatStatusBoss(boss);
-            continue; // free action
-        }
-
-        if (c == 3) {
             player.restoreStamina(player.getMaxStamina());
+            player.getBuffs().restedLastTurn = true;
             std::cout << CYAN << "You catch your breath. Stamina fully restored.\n" << RESET;
             return;
         }
 
-        if (c == 1 || c == 2) {
-            bool isHeavy  = (c == 2);
-            bool isCrit   = false;
-            int  critPos  = 10;
-            int  cursorPos = runTimingBar(isHeavy, critPos);
-            int  dmg = player.timingBasedAttack(cursorPos, critPos, 20, isHeavy, isCrit);
-            if (dmg == 0) { continue; }
+        if (c >= 1 && c <= 3) {
+            int slot = c - 1;
+            if (!player.isAttackReady(slot)) {
+                std::cout << RED << "That skill is on cooldown (" << player.getAttackCooldown(slot) << " turns).\n" << RESET;
+                continue;
+            }
+            const AttackType& at = player.getAttack(slot);
+            bool isCrit = false;
+
+            // Blind miss
+            if (player.getBuffs().blindRounds > 0 && randInt(0, 99) < 30) {
+                std::cout << YELLOW << "[BLIND] You swing and miss! Your vision fails you.\n" << RESET;
+                --player.getBuffs().blindRounds;
+                if (player.getBuffs().blindRounds == 0)
+                    std::cout << "Your sight returns.\n";
+                player.startCooldown(slot);
+                return;
+            }
+            if (player.getBuffs().blindRounds > 0) --player.getBuffs().blindRounds;
+
+            player.getBuffs().attackTypeDefenseThisTurn = at.defenseBonus;
+
+            // Death's Bargain: damage is 40% of missing HP, skip timing roll
+            int dmg = 0;
+            if (at.effect == AttackEffect::DAMAGE_FROM_MISSING_HP) {
+                int missing = player.getMaxHealth() - player.getHealth();
+                dmg = std::max(1, static_cast<int>(missing * 0.4f));
+                std::cout << YELLOW << "[DEATH'S BARGAIN] Missing HP: " << missing
+                          << " → " << dmg << " damage!\n" << RESET;
+                if (at.effectValue > 0) {
+                    player.heal(at.effectValue);
+                    std::cout << GREEN << "[DEATH'S BARGAIN] Restored " << at.effectValue << " HP.\n" << RESET;
+                }
+                if (player.getBuffs().rageDraughtActive) {
+                    dmg = static_cast<int>(dmg * 1.5f);
+                    player.getBuffs().rageDraughtActive = false;
+                    std::cout << YELLOW << "Rage Draught surges through you!\n" << RESET;
+                }
+            } else {
+                int baseRoll = at.roll() + player.getWeapon().getModifier();
+
+                if (player.getBuffs().comboSetupBonus > 0) {
+                    baseRoll += player.getBuffs().comboSetupBonus;
+                    std::cout << CYAN << "[COMBO] +" << player.getBuffs().comboSetupBonus << " bonus damage!\n" << RESET;
+                    player.getBuffs().comboSetupBonus = 0;
+                }
+
+                // Coiled Strike: bonus if rested last turn
+                if (at.effect == AttackEffect::BONUS_IF_RESTED && player.getBuffs().restedLastTurn) {
+                    baseRoll += at.effectValue;
+                    std::cout << CYAN << "[COILED STRIKE] Tension released! +" << at.effectValue << " damage!\n" << RESET;
+                }
+
+                if (at.effect == AttackEffect::CRIMSON_FURY && player.getBuffs().bleeding) {
+                    baseRoll *= 2;
+                    std::cout << RED << "[CRIMSON FURY] Your blood fuels the strike!\n" << RESET;
+                }
+
+                // Desperate Strike: x2 if player below 40% HP
+                if (at.effect == AttackEffect::DESPERATE_STRIKE &&
+                    player.getHealth() < player.getMaxHealth() * 0.4f) {
+                    baseRoll *= 2;
+                    std::cout << RED << "[DESPERATE STRIKE] Pain becomes power!\n" << RESET;
+                }
+
+                if (player.getBuffs().doubleNextDamage) {
+                    baseRoll *= 2;
+                    std::cout << YELLOW << "[VOID BULWARK] Double damage!\n" << RESET;
+                    player.getBuffs().doubleNextDamage = false;
+                }
+
+                int critWidthBonus = player.hasRune(RuneType::STEADY_EYE) ? 2 : 0;
+                int critPos  = 10;
+                int cursorPos = runTimingBar(true, critPos, critWidthBonus);
+                dmg = player.timingBasedAttack(cursorPos, critPos, 20, baseRoll, isCrit);
+                if (dmg == 0) { continue; }
+
+                if (isCrit && player.hasRune(RuneType::BLOODHUNGER))
+                    dmg = static_cast<int>(dmg * 1.5f);
+            }
 
             int def = 0;
             if (player.getBuffs().phantomsDraughtActive) {
-                std::cout << MAGENTA << "[PHANTOM'S DRAUGHT] Your strike passes through their guard!\n" << RESET;
+                std::cout << MAGENTA << "[PHANTOM'S DRAUGHT] Your strike bypasses their guard!\n" << RESET;
                 player.getBuffs().phantomsDraughtActive = false;
             } else {
                 def = boss.rollDefense();
             }
             int net = std::max(1, dmg - def);
             boss.takeDamage(net);
-            std::cout << "You deal " << GREEN << net << " damage.\n" << RESET;
-
-            if (boss.checkPhaseTransition()) {
-                std::cout << "\n" << YELLOW << BOLD << boss.getPhaseText() << "\n" << RESET;
+            if (isCrit) {
+                std::cout << YELLOW << BOLD
+                          << "  \xe2\x95\x94\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x97\n"
+                          << "  \xe2\x95\x91  \xe2\x98\x85 CRITICAL HIT!  \xe2\x95\x91  "
+                          << GREEN << net << YELLOW << " dmg\n"
+                          << "  \xe2\x95\x9a\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x9d\n"
+                          << RESET;
+                std::cout << DIM << "  [" << at.name << "]\n" << RESET;
+            } else {
+                std::cout << "You deal " << GREEN << net << " damage" << RESET
+                          << " [" << at.name << "]\n";
             }
+
+            // Attack effects (player-side buffs; boss has no status effect support)
+            switch (at.effect) {
+                case AttackEffect::COMBO_SETUP:
+                    player.getBuffs().comboSetupBonus = at.effectValue;
+                    std::cout << CYAN << "[COMBO] Next attack +" << at.effectValue << " damage.\n" << RESET;
+                    break;
+                case AttackEffect::DOUBLE_NEXT_DAMAGE:
+                    player.getBuffs().doubleNextDamage = true;
+                    std::cout << YELLOW << "[VOID BULWARK] Next attack deals x2 damage.\n" << RESET;
+                    break;
+                case AttackEffect::DODGE_NEXT_ATTACK:
+                    player.getBuffs().dodgeNextAttack = true;
+                    std::cout << CYAN << "[WARDING BLOW] Next incoming attack will be dodged.\n" << RESET;
+                    break;
+                case AttackEffect::EXECUTE_HEAL:
+                    if (!boss.isAlive()) {
+                        player.heal(at.effectValue);
+                        std::cout << GREEN << "[SOUL CLEAVE] Kill heals " << at.effectValue << " HP!\n" << RESET;
+                    }
+                    break;
+                case AttackEffect::SELF_BLEED:
+                    player.getBuffs().bleeding = true;
+                    std::cout << RED << "[BLOODPRICE] You open your own wound. You are now bleeding.\n" << RESET;
+                    break;
+                case AttackEffect::REST_TO_HEAL:
+                    player.getBuffs().restHealBonus += at.effectValue;
+                    std::cout << CYAN << "[STILLNESS] Rest soon to recover " << at.effectValue << " HP.\n" << RESET;
+                    break;
+                case AttackEffect::APPLY_POISON_AND_COMBO:
+                    // Boss has no poison support — apply combo bonus only
+                    player.getBuffs().comboSetupBonus += at.effectValue;
+                    std::cout << CYAN << "[TOXIN BARB] Next attack +" << at.effectValue << " damage.\n" << RESET;
+                    break;
+                case AttackEffect::APPLY_BLEED_DEF_HEAL:
+                    player.heal(at.effectValue);
+                    std::cout << GREEN << "[BLOOD REAPER] Healed " << at.effectValue << " HP."
+                              << " (+" << at.defenseBonus << " def this turn)\n" << RESET;
+                    break;
+                case AttackEffect::APPLY_POISON_ADD:
+                case AttackEffect::DOUBLE_POISON_STACKS:
+                case AttackEffect::BLIND_IF_POISONED:
+                case AttackEffect::BLIND_AMPLIFY:
+                case AttackEffect::BLEED_BURST:
+                case AttackEffect::STATUS_OVERLOAD:
+                case AttackEffect::POISON_BURST:
+                    // Boss has no status effect support — no effect
+                    break;
+                case AttackEffect::DESPERATE_STRIKE:
+                    // Handled pre-roll
+                    break;
+                default: break;
+            }
+
+            player.startCooldown(slot);
+            if (boss.checkPhaseTransition())
+                std::cout << "\n" << YELLOW << BOLD << boss.getPhaseText() << "\n" << RESET;
             if (!boss.isAlive()) bossDead = true;
             return;
         }
@@ -1977,9 +2657,27 @@ void Game::playerAttackTurnBoss(Boss& boss, bool& bossDead) {
 }
 
 void Game::enemyAttackTurnBoss(Boss& boss) {
+    // Warding Blow: player dodges this entire turn
+    if (player.getBuffs().dodgeNextAttack) {
+        player.getBuffs().dodgeNextAttack = false;
+        std::cout << CYAN << "[WARDING] You sidestep " << boss.getName() << "'s attack completely!\n" << RESET;
+        return;
+    }
+
+    // Ghost Step: 20% dodge
+    if (player.hasRune(RuneType::GHOST_STEP) && randInt(0, 99) < 20) {
+        std::cout << CYAN << "[GHOST STEP] You ghost through " << boss.getName() << "'s attack!\n" << RESET;
+        return;
+    }
+
     int atk = boss.rollAttack();
     int def = player.rollDefense();
     int dmg = std::max(1, atk - def);
+
+    // Iron Skin passive: 25% damage reduction
+    if (player.hasRune(RuneType::IRON_SKIN))
+        dmg = std::max(1, static_cast<int>(dmg * 0.75f));
+
     player.takeDamage(dmg);
     std::cout << RED << boss.getName() << " attacks for " << dmg << " damage.\n" << RESET;
 }
@@ -2068,6 +2766,103 @@ void Game::showTwistReveal() {
     pressEnter();
 }
 
+// ── Discoveries ───────────────────────────────────────────────────────────────
+
+void Game::showDiscoveries() {
+    // Build the master lists from the pools (used for total counts and ordering)
+    static const ItemRarity rarityOrder[] = {
+        ItemRarity::COMMON, ItemRarity::RARE, ItemRarity::EPIC, ItemRarity::LEGENDARY
+    };
+    static const char* rarityLabel[] = { "COMMON", "RARE", "EPIC", "LEGENDARY" };
+
+    // Count totals
+    int totalAttacks = 0;
+    for (auto r : rarityOrder) totalAttacks += (int)getAttackPool(r).size();
+    const int totalRunes = 10;
+
+    while (true) {
+        clearScreen();
+        std::cout << YELLOW << BOLD
+                  << "  \xe2\x95\x94\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x97\n"
+                  << "  \xe2\x95\x91                      DISCOVERIES                       \xe2\x95\x91\n"
+                  << "  \xe2\x95\x9a\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x9d\n"
+                  << RESET;
+
+        int knownAttacks = (int)discoveries.attacks.size();
+        int knownRunes   = (int)discoveries.runes.size();
+        std::cout << "\n  " << CYAN << "Skills: " << knownAttacks << " / " << totalAttacks << RESET
+                  << "    " << CYAN << "Runes: " << knownRunes << " / " << totalRunes << RESET << "\n\n";
+
+        std::cout << BOLD << YELLOW << "  [ 1 ]" << RESET << "  Skills\n";
+        std::cout << BOLD << YELLOW << "  [ 2 ]" << RESET << "  Runes\n";
+        std::cout << BOLD << YELLOW << "  [ 0 ]" << RESET << "  Back\n";
+        std::cout << DIM << "  ──────────────────────────────────────────────────────────\n" << RESET;
+        std::cout << "\n  Choice: ";
+
+        int c = 0; std::cin >> c;
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+
+        if (c == 0) return;
+
+        if (c == 1) {
+            // ── Skills ────────────────────────────────────────────────────────
+            clearScreen();
+            std::cout << YELLOW << BOLD
+                      << "  ─────────────────────── SKILLS ────────────────────────\n\n" << RESET;
+
+            for (int ri = 0; ri < 4; ++ri) {
+                ItemRarity rar = rarityOrder[ri];
+                auto pool = getAttackPool(rar);
+                int knownInTier = 0;
+                for (auto& at : pool)
+                    if (discoveries.attacks.count(at.name)) ++knownInTier;
+
+                std::cout << Item::getRarityColor(rar) << BOLD
+                          << "  " << rarityLabel[ri]
+                          << DIM << "  (" << knownInTier << "/" << (int)pool.size() << ")"
+                          << RESET << "\n";
+
+                for (auto& at : pool) {
+                    if (discoveries.attacks.count(at.name)) {
+                        std::cout << "  " << Item::getRarityColor(at.rarity) << BOLD
+                                  << at.name << RESET;
+                        std::cout << DIM << "  [" << at.getStatsString() << "]\n";
+                        std::cout << "    " << at.description << "\n" << RESET;
+                    } else {
+                        std::cout << DIM << "  ???\n" << RESET;
+                    }
+                }
+                std::cout << "\n";
+            }
+            pressEnter();
+        }
+
+        if (c == 2) {
+            // ── Runes ─────────────────────────────────────────────────────────
+            clearScreen();
+            std::cout << CYAN << BOLD
+                      << "  ──────────────────────── RUNES ────────────────────────\n\n" << RESET;
+
+            static const RuneType allRunes[] = {
+                RuneType::IRON_SKIN,   RuneType::BLOODHUNGER, RuneType::STEADY_EYE,
+                RuneType::GHOST_STEP,  RuneType::PREDATOR,    RuneType::DEEP_CUTS,
+                RuneType::TOXIN_RIDER, RuneType::PLAGUE_WARD, RuneType::ASH_VEIL,
+                RuneType::NIGHTKEEPER
+            };
+
+            for (auto r : allRunes) {
+                if (discoveries.runes.count(static_cast<int>(r))) {
+                    std::cout << "  " << CYAN << BOLD << runeName(r) << RESET << "\n";
+                    std::cout << DIM << "    " << runeDescription(r) << "\n\n" << RESET;
+                } else {
+                    std::cout << DIM << "  ???\n\n" << RESET;
+                }
+            }
+            pressEnter();
+        }
+    }
+}
+
 void Game::showTutorial() {
     bool inTutorial = true;
     while (inTutorial) {
@@ -2077,7 +2872,7 @@ void Game::showTutorial() {
         std::cout <<                   "═══════════════════════════════════════════════\n" << RESET;
         std::cout << "\n  1. Combat Basics\n";
         std::cout <<   "  2. Status Effects\n";
-        std::cout <<   "  3. Stances\n";
+        std::cout <<   "  3. Runes\n";
         std::cout <<   "  4. The Map\n";
         std::cout <<   "  0. Back\n\n";
         std::cout << "Choice: ";
@@ -2093,20 +2888,23 @@ void Game::showTutorial() {
         case 1:
             std::cout << YELLOW << BOLD << "── COMBAT BASICS ──────────────────────────────\n" << RESET;
             std::cout <<
-                "\nEach combat turn you choose:\n"
-                "  1. Light Attack  — costs 1 stamina\n"
-                "  2. Heavy Attack  — costs 2 stamina, harder to land a crit\n"
-                "  3. Rest          — skip your turn, recover all stamina\n"
-                "  4. Inventory     — use a potion (FREE, no turn cost)\n"
-                "  5. Switch Stance — change your stance (FREE, no turn cost)\n\n"
+                "\nEach combat turn you choose an action:\n"
+                "  [1-3] Attack Slot — use one of your three attack types\n"
+                "  [4]   Rest        — skip your turn, recover all stamina\n"
+                "  [5]   Inventory   — use a potion (FREE, no turn cost)\n"
+                "  [6]   Talk        — attempt to reason with the enemy\n"
+                "  [7]   Bargain     — bribe the enemy with gold\n\n"
+                << BOLD << "Attack Types\n" << RESET <<
+                "  You carry 3 attack slots. Each attack has a cooldown (1-2 turns).\n"
+                "  With 3 slots and max 2-turn cooldowns, you always have at least one ready.\n"
+                "  Attacks come in rarities: Common, Rare, Epic, Legendary.\n"
+                "  Each attack has unique dice damage, effects, and defense bonuses.\n\n"
                 << BOLD << "Timing Bar\n" << RESET <<
                 "  A cursor moves across the bar. Press SPACE to stop it.\n"
-                "  Hit the marked zone for a critical hit.\n"
-                "  Light attacks have a 3-position crit zone.\n"
-                "  Heavy attacks have a 1-position crit zone — very tight, high reward.\n\n"
+                "  Hit the marked crit zone for bonus damage (very tight — 1 position).\n"
+                "  The Steady Eye rune widens the crit zone by 2 positions.\n\n"
                 << BOLD << "Stamina\n" << RESET <<
-                "  You have limited stamina per fight. Light attacks cost 1, heavy cost 2.\n"
-                "  Running out means you must Rest (losing your turn) to recover.\n\n"
+                "  All attacks cost 1 stamina. Rest recovers all stamina (loses your turn).\n\n"
                 << BOLD << "Bargaining & Talking\n" << RESET <<
                 "  Some enemies can be talked to or bribed with gold to end the fight.\n";
             break;
@@ -2132,26 +2930,25 @@ void Game::showTutorial() {
                 "  Use an " << GREEN << "Antidote" << RESET << " to cure all status effects at once.\n";
             break;
         case 3:
-            std::cout << YELLOW << BOLD << "── STANCES ─────────────────────────────────────\n" << RESET;
+            std::cout << YELLOW << BOLD << "── RUNES ────────────────────────────────────────\n" << RESET;
             std::cout <<
-                "\nStances are passive modifiers active during combat.\n"
-                "Switching stance is FREE — it does not cost your turn.\n"
-                "You start with Defensive and Offensive stances.\n"
-                "Learn more from the Stance Teacher at [?] nodes on the map.\n\n"
-                << BOLD << "Basic Stances:\n" << RESET <<
-                "  Defensive   — Incoming damage reduced to 75%\n"
-                "  Offensive   — Critical hits deal x1.5 damage\n"
-                "  Focused     — Heavy attack crit window +2 positions (3 instead of 1)\n"
-                "  Evasive     — 20% chance to fully dodge an incoming attack\n\n"
-                << BOLD << "Bleed Stances:\n" << RESET <<
-                "  Bloodlust   — Bleeding enemies deal 40% less damage to you\n"
-                "  Hemorrhage  — Bleed deals 5 damage per turn instead of 2\n\n"
-                << BOLD << "Poison Stances:\n" << RESET <<
-                "  Venomous    — Each hit adds +1 poison stack (only if enemy is poisoned)\n"
-                "  Resistant   — You are immune to poison\n\n"
-                << BOLD << "Blind Stances:\n" << RESET <<
-                "  Obscured    — Blinded enemies miss 50% of attacks (up from 30%)\n"
-                "  Eternal Dark — Blind is permanent while in this stance; 40% miss chance\n";
+                "\nRunes are always-on bonuses that shape how you fight.\n"
+                "You have 2 rune slots. Unequipped runes are saved in your library.\n"
+                "Reassign runes at Rest nodes or the Town of Dead Ballads.\n"
+                "Learn new runes from M'alid at [?] nodes on the map.\n\n"
+                << BOLD << "General Runes:\n" << RESET <<
+                "  Iron Skin    — Incoming damage reduced by 25%\n"
+                "  Bloodhunger  — Critical hits deal x1.5 damage\n"
+                "  Steady Eye   — Crit zone on the timing bar is 2 positions wider\n"
+                "  Ghost Step   — 20% chance to fully dodge an incoming attack\n"
+                "  Predator     — Bleeding enemies deal 40% less damage to you\n\n"
+                << BOLD << "Bleed / Poison Runes:\n" << RESET <<
+                "  Deep Cuts    — Bleed deals 5 damage per turn instead of 2\n"
+                "  Toxin Rider  — Each hit adds +1 poison stack (only if enemy is poisoned)\n"
+                "  Plague Ward  — You are immune to poison\n\n"
+                << BOLD << "Blind Runes:\n" << RESET <<
+                "  Ash Veil     — Blinded enemies miss 50% of attacks (up from 30%)\n"
+                "  Nightkeeper  — While an enemy is blinded: blind persists; 40% miss chance\n";
             break;
         case 4:
             std::cout << YELLOW << BOLD << "── THE MAP ─────────────────────────────────────\n" << RESET;
@@ -2160,13 +2957,12 @@ void Game::showTutorial() {
                 "  [FIGHT]  — Standard enemy encounter\n"
                 "  [ELITE]  — Stronger enemy, better rewards\n"
                 "  [EVENT]  — Story event, quest triggers, random rewards or penalties\n"
-                "  [  ?  ]  — Random event or M'alid the Stance Teacher (25% chance)\n"
-                "  [SHOP ]  — Buy potions and upgrade your weapon or armour\n"
-                "  [ REST]  — Recover 25% HP, full stamina, and clear all status effects\n"
+                "  [  ?  ]  — Random event or M'alid the Rune Teacher (25% chance)\n"
+                "  [SHOP ]  — Buy potions and equipment\n"
+                "  [ REST]  — Recover 25% HP, full stamina, reassign runes, clear statuses\n"
                 "  [ BOSS]  — Chapter boss. Defeat it to progress.\n\n"
                 << BOLD << "Death is permanent.\n" << RESET <<
-                "  When you die, the run ends. All progress resets.\n"
-                "  Your stance pool resets to [Defensive, Offensive].\n\n"
+                "  When you die, the run ends. All progress resets.\n\n"
                 << BOLD << "Luck\n" << RESET <<
                 "  Luck improves item drop quality, status effect proc chances,\n"
                 "  and the chance a looted weapon carries a status effect.\n";

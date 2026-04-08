@@ -103,6 +103,12 @@ std::string Item::getRarityString() const { return getRarityName(rarity); }
 
 std::string Item::getStatsString() const {
     std::ostringstream ss;
+    // Flat-bonus item (diceCount == 0): show +X dmg / +X def
+    if (diceCount == 0) {
+        ss << (type == ItemType::WEAPON ? "+" : "+") << modifier
+           << (type == ItemType::WEAPON ? " dmg" : " def");
+        return ss.str();
+    }
     ss << diceCount << "d" << diceSides;
     if (modifier > 0) ss << "+" << modifier;
     if (upgradeLevel > 0) ss << " [+" << upgradeLevel << "]";
@@ -138,10 +144,47 @@ void Item::setStatusEffect(StatusEffect e){ statusEffect = e; }
 bool Item::upgrade() {
     if (upgradeLevel >= 3) return false;
     ++upgradeLevel;
-    diceSides += 2;
+    if (diceCount == 0) {
+        // Flat-bonus item (starting gear, elite drops): increase modifier directly
+        modifier += 2;
+    } else {
+        // Dice item: widen the die
+        diceSides += 2;
+    }
     value += 40;
     name += "+";
     return true;
+}
+
+Item Item::generateFlatItem(ItemType t, ItemRarity r) {
+    // Flat bonus values per rarity
+    // Weapon: +3 / +6 / +10 / +15 damage
+    // Armor:  +5 / +9 / +14 / +20 defense
+    static const int wBonuses[] = { 3, 6, 10, 15 };
+    static const int aBonuses[] = { 5, 9, 14, 20 };
+    int idx = static_cast<int>(r);
+    int bonus = (t == ItemType::WEAPON) ? wBonuses[idx] : aBonuses[idx];
+
+    static std::mt19937 rng(std::time(nullptr));
+    static const char* wnames[] = {
+        "Ashen Edge","Cracked Sword","Bone Hatchet","Iron Spear","Dull Mace","Peasant's Knife"
+    };
+    static const char* anames[] = {
+        "Leather Vest","Tattered Cloak","Ash-stained Mail","Briar Shield","Bark Armour","Soot Greaves"
+    };
+    std::string n = std::string(getRarityName(r)) + " " +
+                    (t == ItemType::WEAPON ? wnames[rng() % 6] : anames[rng() % 6]);
+
+    // diceCount=0 signals flat-bonus mode; modifier holds the bonus value
+    Item item;
+    item.name      = n;
+    item.type      = t;
+    item.rarity    = r;
+    item.diceCount = 0;
+    item.diceSides = 1;
+    item.modifier  = bonus;
+    item.value     = (idx + 1) * 30;
+    return item;
 }
 
 Item Item::generateRandomItem(int chapterTier) {

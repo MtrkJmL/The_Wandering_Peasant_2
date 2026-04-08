@@ -54,5 +54,7 @@ public:
     void setStatusEffect(StatusEffect e);
 
     static Item generateRandomItem(int chapterTier = 1);
+    // Elite-drop flat-bonus equipment: diceCount=0, modifier=flatBonus
+    static Item generateFlatItem(ItemType type, ItemRarity rarity);
     static std::string getRarityColor(ItemRarity r);
 };

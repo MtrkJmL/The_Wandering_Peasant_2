@@ -3,19 +3,29 @@
 #include <vector>
 #include "Item.h"
 #include "Potion.h"
-#include "Stance.h"
+#include "Rune.h"
+#include "AttackType.h"
 
 struct CombatBuffs {
-    int  shieldTonicTurns      = 0;     // +5 defense for N turns
-    bool rageDraughtActive     = false; // next attack x1.5
-    int  lockedPotionIndex     = -1;    // Soul Binder effect (-1 = none)
-    // Status effects applied to the player by enemies
-    bool bleeding              = false; // Ash Hound — 2 dmg/turn, permanent
-    int  poisonStacks          = 0;     // Plague Shaman — X dmg/turn, decays by 1
-    int  blindRounds           = 0;     // Ember Witch — player misses 30%, 3 rounds
+    int  shieldTonicTurns         = 0;     // +5 defense for N turns
+    bool rageDraughtActive        = false; // next attack x1.5
+    int  lockedPotionIndex        = -1;    // Soul Binder effect (-1 = none)
+    // Status effects applied to player by enemies
+    bool bleeding                 = false; // Ash Hound — 2 dmg/turn, permanent
+    int  poisonStacks             = 0;     // Plague Shaman — X dmg/turn, decays by 1
+    int  blindRounds              = 0;     // Ember Witch — player misses 30%, 3 rounds
     // Town of Dead Ballads potion effects
-    bool phantomsDraughtActive = false; // next attack ignores enemy defense
-    int  gravewardenOilCharges = 0;     // next N attacks apply Bleed guaranteed
+    bool phantomsDraughtActive    = false; // next attack ignores enemy defense
+    int  gravewardenOilCharges    = 0;     // next N attacks apply Bleed guaranteed
+    // Attack type per-turn state
+    int  attackTypeDefenseThisTurn = 0;   // defense granted by attack type used this turn
+    bool dodgeNextAttack           = false; // Warding Blow
+    bool doubleNextDamage          = false; // Void Bulwark: next attack x2
+    int  comboSetupBonus           = 0;    // Braced Strike: +N to next attack damage
+    bool skipEnemyNextTurn         = false; // Void Collapse: enemy skips next attack
+    bool suppressEnemyRegen        = false; // Immortal Scar: enemy cannot regen this fight
+    int  restHealBonus             = 0;    // Stillness: heal this amount on next rest
+    bool restedLastTurn            = false; // Coiled Strike: +bonus if rested last turn
 };
 
 class Player {
@@ -30,16 +40,22 @@ private:
     int         maxStamina;
     int         defense;
     int         luck;
+
+    // Flat-bonus equipment (diceCount=0, modifier=bonus)
     Item        weapon;
     Item        armor;
-    std::vector<Potion> potions; // usable in combat, free action
+
+    // Attack type system
+    AttackType  attackSlots[3];
+    int         attackCooldowns[3]; // turns remaining on cooldown (0 = ready)
+
+    // Rune system
+    std::vector<RuneType> learnedRunes;
+    RuneType              runeSlots[2]; // RuneType::NONE if empty
+
+    std::vector<Potion> potions;
     int         experienceToNextLevel;
     CombatBuffs buffs;
-
-    // Stance system
-    std::vector<StanceType> learnedStances; // pool built over the run
-    StanceType              activeStance;
-    bool                    stanceActive;   // false only on first init before picking
 
 public:
     Player();
@@ -81,13 +97,12 @@ public:
     int  rollDefense() const;
     bool isAlive()     const;
 
-    // Timing-based attack (randomised crit position)
-    // critPos is generated outside and passed in so UI can display it
+    // Timing-based attack (baseDamageRoll already rolled by caller from AttackType)
     int  timingBasedAttack(int cursorPos, int critPos, int totalPositions,
-                           bool isHeavy, bool& isCrit);
+                           int baseDamageRoll, bool& isCrit);
 
-    // Potions (free action — no turn cost)
-    bool usePotion(int index); // returns false if slot locked or empty
+    // Potions (free action)
+    bool usePotion(int index);
     void addPotion(const Potion& p);
     void lockPotionSlot(int index);
     void clearPotionLock();
@@ -95,14 +110,22 @@ public:
     // Per-turn buff tick (call at start of player turn)
     void tickBuffs();
 
-    // Stance system
-    void                           learnStance(StanceType s);
-    bool                           hasLearnedStance(StanceType s) const;
-    const std::vector<StanceType>& getLearnedStances() const;
-    StanceType                     getActiveStance()   const;
-    bool                           hasStanceActive()   const;
-    bool                           switchStance(StanceType s); // true if in pool
-    void                           resetStances();             // call on death/new run
+    // Attack type system
+    const AttackType& getAttack(int slot)    const;
+    int               getAttackCooldown(int slot) const;
+    bool              isAttackReady(int slot) const;
+    void              setAttack(int slot, const AttackType& at);
+    void              startCooldown(int slot);   // set cooldown from attackSlots[slot].cooldown
+    void              tickCooldowns();           // decrement all cooldowns (call at start of player turn)
+
+    // Rune system
+    void                        learnRune(RuneType r);
+    bool                        hasLearnedRune(RuneType r) const;
+    bool                        hasRune(RuneType r) const; // true if in an active slot
+    const std::vector<RuneType>& getLearnedRunes() const;
+    RuneType                    getRuneSlot(int slot) const;
+    bool                        setRuneSlot(int slot, RuneType r); // true if learned
+    void                        resetRunes();
 
     // Player status effect application (by enemies)
     void applyBleedToPlayer();

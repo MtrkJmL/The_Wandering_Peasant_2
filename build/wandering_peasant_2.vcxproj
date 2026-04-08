@@ -339,10 +339,12 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
     <ClCompile Include="C:\Users\Mustafa\Desktop\CCGS\Claude-Code-Game-Studios\The_Wandering_Peasant_2\src\Boss.cpp" />
     <ClCompile Include="C:\Users\Mustafa\Desktop\CCGS\Claude-Code-Game-Studios\The_Wandering_Peasant_2\src\Item.cpp" />
     <ClCompile Include="C:\Users\Mustafa\Desktop\CCGS\Claude-Code-Game-Studios\The_Wandering_Peasant_2\src\Potion.cpp" />
+    <ClCompile Include="C:\Users\Mustafa\Desktop\CCGS\Claude-Code-Game-Studios\The_Wandering_Peasant_2\src\AttackType.cpp" />
     <ClCompile Include="C:\Users\Mustafa\Desktop\CCGS\Claude-Code-Game-Studios\The_Wandering_Peasant_2\src\ChapterMap.cpp" />
     <ClCompile Include="C:\Users\Mustafa\Desktop\CCGS\Claude-Code-Game-Studios\The_Wandering_Peasant_2\src\RunState.cpp" />
     <ClCompile Include="C:\Users\Mustafa\Desktop\CCGS\Claude-Code-Game-Studios\The_Wandering_Peasant_2\src\Quest.cpp" />
     <ClCompile Include="C:\Users\Mustafa\Desktop\CCGS\Claude-Code-Game-Studios\The_Wandering_Peasant_2\src\Node.cpp" />
+    <ClCompile Include="C:\Users\Mustafa\Desktop\CCGS\Claude-Code-Game-Studios\The_Wandering_Peasant_2\src\Discoveries.cpp" />
   </ItemGroup>
   <ItemGroup />
   <ItemGroup>

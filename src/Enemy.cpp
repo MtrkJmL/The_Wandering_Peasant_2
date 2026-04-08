@@ -231,8 +231,16 @@ void Enemy::applyBleed() {
     bleedStacks = 1; // permanent until death — re-applying just refreshes
 }
 
+void Enemy::clearBleed() {
+    bleedStacks = 0;
+}
+
 void Enemy::applyPoison(int stacks) {
     poisonStacks += stacks; // stacks add — 4 existing + 5 applied = 9
+}
+
+void Enemy::clearPoison() {
+    poisonStacks = 0;
 }
 
 void Enemy::applyBlind(int rounds) {

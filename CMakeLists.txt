@@ -12,11 +12,12 @@ add_executable(wandering_peasant_2
     src/Boss.cpp
     src/Item.cpp
     src/Potion.cpp
+    src/AttackType.cpp
     src/ChapterMap.cpp
     src/RunState.cpp
     src/Quest.cpp
     src/Node.cpp
-    src/RunState.cpp
+    src/Discoveries.cpp
 )
 
 target_include_directories(wandering_peasant_2 PRIVATE include)
