@@ -91,8 +91,9 @@ ItemType    Item::getType()      const { return type; }
 ItemRarity  Item::getRarity()    const { return rarity; }
 int         Item::getValue()     const { return value; }
 int         Item::getSellValue() const {
-    int base = diceCount * diceSides * 3 + modifier * 2 + upgradeLevel * 20;
-    return std::max(5, base);
+    static const int rarityBase[] = { 15, 35, 65, 110 };
+    int base = rarityBase[static_cast<int>(rarity)] + upgradeLevel * 20;
+    return base;
 }
 int         Item::getDiceCount() const { return diceCount; }
 int         Item::getDiceSides() const { return diceSides; }

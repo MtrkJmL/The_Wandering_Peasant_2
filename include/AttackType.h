@@ -51,6 +51,7 @@ struct AttackType {
 
     int         roll() const;
     std::string getStatsString() const;
+    int         getSellValue() const;
 };
 
 // Full pools per rarity

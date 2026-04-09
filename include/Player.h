@@ -19,6 +19,7 @@ struct CombatBuffs {
     int  gravewardenOilCharges    = 0;     // next N attacks apply Bleed guaranteed
     // Attack type per-turn state
     int  attackTypeDefenseThisTurn = 0;   // defense granted by attack type used this turn
+    int  mirrorStrikeReflectPct    = 0;   // % of incoming damage to reflect (Mirror Strike only)
     bool dodgeNextAttack           = false; // Warding Blow
     bool doubleNextDamage          = false; // Void Bulwark: next attack x2
     int  comboSetupBonus           = 0;    // Braced Strike: +N to next attack damage

@@ -22,6 +22,13 @@ int AttackType::roll() const {
     return std::max(0, total);
 }
 
+// ── getSellValue() ────────────────────────────────────────────────────────────
+
+int AttackType::getSellValue() const {
+    static const int rarityBase[] = { 20, 45, 80, 130 };
+    return rarityBase[static_cast<int>(rarity)];
+}
+
 // ── getStatsString() ──────────────────────────────────────────────────────────
 
 std::string AttackType::getStatsString() const {

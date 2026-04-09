@@ -125,6 +125,25 @@ void Game::displayMainMenu() {
     while (isRunning) {
         clearScreen();
 
+        // ── ASCII scene ──────────────────────────────────────────────────────
+        std::cout << DIM << YELLOW
+                  << "   *   .    *      .    *   .   *    .    *    .   *   .   *\n"
+                  << RESET;
+        std::cout << DIM << RED
+                  << "         _   |_|     _    |_|    _   |_|     _    |_|    _\n"
+                  << RESET;
+        std::cout << BOLD << "  o" << RESET
+                  << DIM << RED
+                  << "     | |  | |    | |   | |   | |  | |    | |   | |   | |\n"
+                  << RESET;
+        std::cout << BOLD << " /|\\" << RESET
+                  << DIM << RED
+                  << " ___| |__|_|____|_|___|_|___|_|__|_|____|_|___|_|___|_|___\n"
+                  << RESET;
+        std::cout << DIM
+                  << "      . * ash . * ash . * ash . * ash . * ash . * ash . *\n"
+                  << RESET << "\n";
+
         // ── Border ───────────────────────────────────────────────────────────
         std::cout << DIM << YELLOW
                   << "  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n"
@@ -563,15 +582,15 @@ void Game::handleCombatNode(int ch, bool isElite) {
         std::cout << "  Replace a skill slot?\n";
         for (int _i = 0; _i < 3; ++_i)
             std::cout << "  " << (_i+1) << ". Replace [" << player.getAttack(_i).name << "]\n";
-        std::cout << "  0. Sell (20 gold)\n  Choice: ";
+        std::cout << "  0. Sell (" << drop.getSellValue() << " gold)\n  Choice: ";
         int lc = 0; std::cin >> lc;
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         if (lc >= 1 && lc <= 3) {
             player.setAttack(lc - 1, drop);
             std::cout << GREEN << "Slot " << lc << " updated to " << drop.name << ".\n" << RESET;
         } else if (lc == 0) {
-            player.addGold(20);
-            std::cout << YELLOW << "Sold for 20 gold.\n" << RESET;
+            player.addGold(drop.getSellValue());
+            std::cout << YELLOW << "Sold for " << drop.getSellValue() << " gold.\n" << RESET;
         }
     }
     pressEnter();
@@ -1034,8 +1053,8 @@ void Game::handleTownOfDeadBallads(int afterChapter) {
                 std::cout << DIM << "\n  ──────────────────────────────────────────────────────────\n" << RESET;
                 std::cout << YELLOW << "  Gold: " << player.getGold() << RESET << "\n\n";
                 std::cout << BOLD << YELLOW << "  [ 1 ]" << RESET << "  Common skill   " << DIM << "40g\n"  << RESET;
-                std::cout << BOLD << YELLOW << "  [ 2 ]" << RESET << "  Rare skill     " << DIM << "80g\n"  << RESET;
-                std::cout << BOLD << YELLOW << "  [ 3 ]" << RESET << "  Epic skill     " << DIM << "150g\n" << RESET;
+                std::cout << BOLD << YELLOW << "  [ 2 ]" << RESET << "  Rare skill     " << DIM << "100g\n" << RESET;
+                std::cout << BOLD << YELLOW << "  [ 3 ]" << RESET << "  Epic skill     " << DIM << "200g\n" << RESET;
                 // Legendary only available 25% of the time
                 bool legendaryAvail = (randInt(0, 3) == 0);
                 if (legendaryAvail)
@@ -1048,7 +1067,7 @@ void Game::handleTownOfDeadBallads(int afterChapter) {
                 int bc = 0; std::cin >> bc;
                 std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 
-                int costs[] = { 0, 40, 80, 150, 300 };
+                int costs[] = { 0, 40, 100, 200, 300 };
                 ItemRarity rarities[] = {
                     ItemRarity::COMMON, ItemRarity::COMMON, ItemRarity::RARE,
                     ItemRarity::EPIC, ItemRarity::LEGENDARY
@@ -1826,8 +1845,9 @@ void Game::playerAttackTurn(Enemy& enemy, bool& enemyDead, int& lastUsedSlot) {
     if (beh.isTank && !enemy.isTelegraphing())
         enemy.setTelegraphing(randInt(0, 2) == 0);
 
-    // Reset per-turn defense from attack type
+    // Reset per-turn defense and Mirror Strike from attack type
     player.getBuffs().attackTypeDefenseThisTurn = 0;
+    player.getBuffs().mirrorStrikeReflectPct    = 0;
 
     // Tick cooldowns at start of player's turn
     player.tickCooldowns();
@@ -2070,7 +2090,7 @@ void Game::playerAttackTurn(Enemy& enemy, bool& enemyDead, int& lastUsedSlot) {
 
             // Mirror Strike: store reflect % — applied in enemyAttackTurn
             if (at.effect == AttackEffect::REFLECT_DAMAGE) {
-                player.getBuffs().attackTypeDefenseThisTurn = at.effectValue; // e.g. 50 = 50%
+                player.getBuffs().mirrorStrikeReflectPct = at.effectValue; // e.g. 50 = 50%
             }
 
             int net = std::max(1, dmg - def);
@@ -2208,7 +2228,7 @@ void Game::playerAttackTurn(Enemy& enemy, bool& enemyDead, int& lastUsedSlot) {
                     }
                     break;
                 case AttackEffect::REFLECT_DAMAGE:
-                    // Reflect is passive this turn — handled via attackTypeDefenseThisTurn
+                    // Reflect is passive this turn — handled via mirrorStrikeReflectPct
                     std::cout << CYAN << "[MIRROR STRIKE] Reflecting " << at.effectValue
                               << "% of incoming damage.\n" << RESET;
                     break;
@@ -2388,11 +2408,11 @@ void Game::enemyAttackTurn(Enemy& enemy) {
         std::cout << RED << enemy.getName() << " hits you for " << dmg << " damage.\n" << RESET;
 
         // Mirror Strike: reflect a % of damage dealt back at the enemy
-        if (player.getBuffs().attackTypeDefenseThisTurn > 0) {
-            int reflected = std::max(1, dmg * player.getBuffs().attackTypeDefenseThisTurn / 100);
+        if (player.getBuffs().mirrorStrikeReflectPct > 0) {
+            int reflected = std::max(1, dmg * player.getBuffs().mirrorStrikeReflectPct / 100);
             enemy.takeDamage(reflected);
             std::cout << CYAN << "[MIRROR STRIKE] " << reflected << " damage reflected back!\n" << RESET;
-            player.getBuffs().attackTypeDefenseThisTurn = 0;
+            player.getBuffs().mirrorStrikeReflectPct = 0;
         }
 
         // Enemy status procs on player
@@ -2505,6 +2525,7 @@ bool Game::runCombat(Enemy& enemy) {
     player.getBuffs().poisonStacks          = 0;
     player.getBuffs().blindRounds           = 0;
     player.getBuffs().attackTypeDefenseThisTurn = 0;
+    player.getBuffs().mirrorStrikeReflectPct    = 0;
     player.getBuffs().dodgeNextAttack       = false;
     player.getBuffs().doubleNextDamage      = false;
     player.getBuffs().comboSetupBonus       = 0;
@@ -2516,8 +2537,9 @@ bool Game::runCombat(Enemy& enemy) {
 // ── Boss fight loop ───────────────────────────────────────────────────────────
 
 void Game::playerAttackTurnBoss(Boss& boss, bool& bossDead) {
-    // Reset per-turn defense from attack type
+    // Reset per-turn defense and Mirror Strike from attack type
     player.getBuffs().attackTypeDefenseThisTurn = 0;
+    player.getBuffs().mirrorStrikeReflectPct    = 0;
     player.tickCooldowns();
     player.getBuffs().restedLastTurn = false;
 
@@ -2942,11 +2964,11 @@ void Game::enemyAttackTurnBoss(Boss& boss) {
     std::cout << RED << boss.getName() << " attacks for " << dmg << " damage.\n" << RESET;
 
     // Mirror Strike: reflect a % of damage dealt back at the boss
-    if (player.getBuffs().attackTypeDefenseThisTurn > 0) {
-        int reflected = std::max(1, dmg * player.getBuffs().attackTypeDefenseThisTurn / 100);
+    if (player.getBuffs().mirrorStrikeReflectPct > 0) {
+        int reflected = std::max(1, dmg * player.getBuffs().mirrorStrikeReflectPct / 100);
         boss.takeDamage(reflected);
         std::cout << CYAN << "[MIRROR STRIKE] " << reflected << " damage reflected back!\n" << RESET;
-        player.getBuffs().attackTypeDefenseThisTurn = 0;
+        player.getBuffs().mirrorStrikeReflectPct = 0;
     }
 }
 
