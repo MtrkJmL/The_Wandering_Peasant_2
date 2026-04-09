@@ -6,15 +6,17 @@
 #include "RunState.h"
 #include "Quest.h"
 #include "Discoveries.h"
+#include "Achievement.h"
 #include <memory>
 #include <random>
 
 class Game {
 private:
-    Player      player;
-    RunState    runState;
-    Discoveries discoveries;
-    bool        isRunning;
+    Player       player;
+    RunState     runState;
+    Discoveries  discoveries;
+    Achievements achievements;
+    bool         isRunning;
     std::mt19937 rng;
 
     // ── Menus ──────────────────────────────────────────────────
@@ -68,6 +70,11 @@ private:
 
     // ── Persistence ────────────────────────────────────────────
     void saveDiscoveries();
+    void saveAchievements();
+    void notifyAchievement(AchievementID id);
+
+    // ── Achievement screen ─────────────────────────────────────
+    void showAchievements();
 
     // ── Utility ────────────────────────────────────────────────
     void clearScreen() const;

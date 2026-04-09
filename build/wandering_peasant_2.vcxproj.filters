@@ -40,6 +40,9 @@
     <ClCompile Include="C:\Users\Mustafa\Desktop\CCGS\Claude-Code-Game-Studios\The_Wandering_Peasant_2\src\Discoveries.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="C:\Users\Mustafa\Desktop\CCGS\Claude-Code-Game-Studios\The_Wandering_Peasant_2\src\Achievement.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <CustomBuild Include="C:\Users\Mustafa\Desktop\CCGS\Claude-Code-Game-Studios\The_Wandering_Peasant_2\CMakeLists.txt" />

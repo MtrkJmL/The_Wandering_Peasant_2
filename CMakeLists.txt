@@ -18,6 +18,7 @@ add_executable(wandering_peasant_2
     src/Quest.cpp
     src/Node.cpp
     src/Discoveries.cpp
+    src/Achievement.cpp
 )
 
 target_include_directories(wandering_peasant_2 PRIVATE include)

@@ -22,6 +22,12 @@ struct RunState {
     int  totalGoldEarned = 0;
     int  enemiesDefeated = 0;
 
+    // Achievement tracking (per-run, resets on death)
+    int  talkExits         = 0;     // successful Talk combat exits this run
+    int  bargainExits      = 0;     // successful Bargain combat exits this run
+    int  potionsUsedThisRun = 0;    // any potion consumed this run
+    bool runeEverEquipped  = false; // true if any rune was ever slotted this run
+
     // Plague Shaman: permanently locks one potion slot for the entire run
     bool shamanCurseApplied = false;
 

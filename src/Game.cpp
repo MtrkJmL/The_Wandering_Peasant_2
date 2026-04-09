@@ -49,10 +49,22 @@ Game::Game() : isRunning(false), rng(std::time(nullptr)) {
     SetConsoleOutputCP(65001);
 #endif
     discoveries.load("discoveries.dat");
+    achievements.load("achievements.dat");
 }
 
 void Game::saveDiscoveries() {
     discoveries.save("discoveries.dat");
+}
+
+void Game::saveAchievements() {
+    achievements.save("achievements.dat");
+}
+
+void Game::notifyAchievement(AchievementID id) {
+    std::cout << YELLOW << BOLD
+              << "\n  ★ ACHIEVEMENT UNLOCKED: " << achievementData(id).name
+              << "\n" << RESET;
+    saveAchievements();
 }
 
 int Game::randInt(int lo, int hi) {
@@ -142,7 +154,9 @@ void Game::displayMainMenu() {
         std::cout << BOLD << YELLOW  << "  [ 3 ]" << RESET << "  Discoveries"
                   << DIM << "  · " << discoveries.attacks.size() << " skills, "
                   << discoveries.runes.size() << " runes found\n" << RESET;
-        std::cout << BOLD << YELLOW  << "  [ 4 ]" << RESET << "  Exit\n\n";
+        std::cout << BOLD << YELLOW  << "  [ 4 ]" << RESET << "  Achievements"
+                  << DIM << "  · " << achievements.unlockedCount() << " / " << ACH_COUNT << "\n" << RESET;
+        std::cout << BOLD << YELLOW  << "  [ 5 ]" << RESET << "  Exit\n\n";
 
         std::cout << DIM << "  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n" << RESET;
         std::cout << "\n  Choice: ";
@@ -159,7 +173,8 @@ void Game::displayMainMenu() {
         if      (c == 1) startNewGame();
         else if (c == 2) showTutorial();
         else if (c == 3) showDiscoveries();
-        else if (c == 4) isRunning = false;
+        else if (c == 4) showAchievements();
+        else if (c == 5) isRunning = false;
     }
 }
 
@@ -596,7 +611,17 @@ void Game::handleEventNode(int ch) {
             if (c >= 1 && c <= (int)offered.size()) {
                 RuneType learned = offered[c - 1];
                 player.learnRune(learned);
-                if (discoveries.recordRune(learned)) saveDiscoveries();
+                if (discoveries.recordRune(learned)) {
+                    saveDiscoveries();
+                    // First rune ever learned across all runs
+                    if (discoveries.runes.size() == 1)
+                        if (achievements.unlock(AchievementID::FIRST_RUNE))
+                            notifyAchievement(AchievementID::FIRST_RUNE);
+                    // 5 distinct runes learned across all runs
+                    if (discoveries.runes.size() >= 5)
+                        if (achievements.unlock(AchievementID::RUNE_SCHOLAR))
+                            notifyAchievement(AchievementID::RUNE_SCHOLAR);
+                }
                 std::cout << GREEN << "\nYou learn " << runeName(learned) << ".\n" << RESET;
                 std::cout << DIM << "M'alid nods and looks back at the road.\n" << RESET;
 
@@ -606,6 +631,7 @@ void Game::handleEventNode(int ch) {
                 if (slot0free || slot1free) {
                     int target = slot0free ? 0 : 1;
                     player.setRuneSlot(target, learned);
+                    runState.runeEverEquipped = true;
                     std::cout << CYAN << runeName(learned) << " slotted into rune slot "
                               << (target+1) << ".\n" << RESET;
                 } else {
@@ -615,8 +641,8 @@ void Game::handleEventNode(int ch) {
                     std::cout << "  0. Save for later (reassign at rest sites)\nChoice: ";
                     std::string si; std::getline(std::cin, si);
                     int sc = 0; try { sc = std::stoi(si); } catch (...) {}
-                    if (sc == 1) player.setRuneSlot(0, learned);
-                    else if (sc == 2) player.setRuneSlot(1, learned);
+                    if (sc == 1) { player.setRuneSlot(0, learned); runState.runeEverEquipped = true; }
+                    else if (sc == 2) { player.setRuneSlot(1, learned); runState.runeEverEquipped = true; }
                 }
             } else {
                 std::cout << DIM << "You walk on.\n" << RESET;
@@ -1317,6 +1343,9 @@ void Game::handleShopNode() {
             if ((yn == 'y' || yn == 'Y') && player.spendGold(cost)) {
                 item.upgrade();
                 std::cout << GREEN << label << " upgraded! " << item.getStatsString() << "\n" << RESET;
+                if (item.getUpgradeLevel() >= 3)
+                    if (achievements.unlock(AchievementID::FULLY_FORGED))
+                        notifyAchievement(AchievementID::FULLY_FORGED);
             } else if (yn != 'y' && yn != 'Y') {
                 std::cout << "Cancelled.\n";
             } else {
@@ -1377,6 +1406,7 @@ void Game::handleRestNode() {
         if (p1 >= 0 && p1 <= (int)lr.size()) {
             RuneType chosen = (p1 == 0) ? RuneType::NONE : lr[p1-1];
             player.setRuneSlot(0, chosen);
+            if (chosen != RuneType::NONE) runState.runeEverEquipped = true;
         }
 
         std::cout << "  Slot 2 [" << runeName(player.getRuneSlot(1)) << "]: ";
@@ -1385,6 +1415,7 @@ void Game::handleRestNode() {
         if (p2 >= 0 && p2 <= (int)lr.size()) {
             RuneType chosen = (p2 == 0) ? RuneType::NONE : lr[p2-1];
             player.setRuneSlot(1, chosen);
+            if (chosen != RuneType::NONE) runState.runeEverEquipped = true;
         }
         std::cout << CYAN << "\nRunes updated: ["
                   << runeName(player.getRuneSlot(0)) << "] ["
@@ -1460,11 +1491,19 @@ void Game::handleBossNode(int ch) {
             player.setAttack(lc - 1, legendDrop);
     }
 
-    // Mark chapter defeated
-    if      (ch == 1) runState.ch1BossDefeated = true;
-    else if (ch == 2) runState.ch2BossDefeated = true;
-    else {
+    // Mark chapter defeated + unlock progression achievements
+    if (ch == 1) {
+        runState.ch1BossDefeated = true;
+        if (achievements.unlock(AchievementID::ROAD_TO_ASH))
+            notifyAchievement(AchievementID::ROAD_TO_ASH);
+    } else if (ch == 2) {
+        runState.ch2BossDefeated = true;
+        if (achievements.unlock(AchievementID::INTO_THE_FOG))
+            notifyAchievement(AchievementID::INTO_THE_FOG);
+    } else {
         runState.ch3BossDefeated = true;
+        if (achievements.unlock(AchievementID::GOSPEL_OF_ASH))
+            notifyAchievement(AchievementID::GOSPEL_OF_ASH);
         // True ending check
         if (BannerQuest::isComplete(runState)) {
             pressEnter();
@@ -1493,6 +1532,8 @@ void Game::handleBossNode(int ch) {
             slowPrint(amax.getDefeatText(), 16);
             player.addGold(amax.getGoldReward());
             player.addExperience(amax.getExperienceReward());
+            if (achievements.unlock(AchievementID::TRUTH_WAS_ALWAYS_THERE))
+                notifyAchievement(AchievementID::TRUTH_WAS_ALWAYS_THERE);
             pressEnter();
         }
     }
@@ -1808,7 +1849,7 @@ void Game::playerAttackTurn(Enemy& enemy, bool& enemyDead) {
                 int idx = -1;
                 std::string pidx; std::getline(std::cin, pidx);
                 try { idx = std::stoi(pidx) - 1; } catch (...) {}
-                if (idx >= 0) player.usePotion(idx);
+                if (idx >= 0 && player.usePotion(idx)) ++runState.potionsUsedThisRun;
             } else {
                 pressEnter();
             }
@@ -2472,7 +2513,7 @@ void Game::playerAttackTurnBoss(Boss& boss, bool& bossDead) {
                 std::string pidx; std::getline(std::cin, pidx);
                 int idx = -1;
                 try { idx = std::stoi(pidx) - 1; } catch (...) {}
-                if (idx >= 0) player.usePotion(idx);
+                if (idx >= 0 && player.usePotion(idx)) ++runState.potionsUsedThisRun;
             } else {
                 pressEnter();
             }
@@ -2885,7 +2926,7 @@ void Game::potionMenu(Enemy* /*enemy*/) {
     std::cout << "Use which potion? ";
     int c = 0; std::cin >> c;
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-    if (c > 0) player.usePotion(c - 1);
+    if (c > 0 && player.usePotion(c - 1)) ++runState.potionsUsedThisRun;
 }
 
 bool Game::attemptBargain(Enemy& enemy) {
@@ -2896,6 +2937,10 @@ bool Game::attemptBargain(Enemy& enemy) {
     std::cin.ignore(10000, '\n');
     if ((yn == 'y' || yn == 'Y') && player.spendGold(cost)) {
         std::cout << GREEN << "The enemy takes your gold and backs away.\n" << RESET;
+        ++runState.bargainExits;
+        if (runState.bargainExits >= 3)
+            if (achievements.unlock(AchievementID::BARGAINER))
+                notifyAchievement(AchievementID::BARGAINER);
         return true;
     }
     if (yn == 'y' || yn == 'Y')
@@ -2910,7 +2955,14 @@ bool Game::attemptTalk(Enemy& enemy) {
     std::cout << "Choice: ";
     int c = 0; std::cin >> c;
     std::cin.ignore(10000, '\n');
-    return (c == 1);
+    bool success = (c == 1);
+    if (success) {
+        ++runState.talkExits;
+        if (runState.talkExits >= 3)
+            if (achievements.unlock(AchievementID::WORDSMITH))
+                notifyAchievement(AchievementID::WORDSMITH);
+    }
+    return success;
 }
 
 // ── Victory / game over ───────────────────────────────────────────────────────
@@ -2933,6 +2985,33 @@ void Game::showTwistReveal() {
         "Every time something pushed you forward.\n\n"
         "You were the bait.\n\n"
         "You still are.", 14);
+    pressEnter();
+}
+
+// ── Achievements ──────────────────────────────────────────────────────────────
+
+void Game::showAchievements() {
+    clearScreen();
+    std::cout << BOLD << YELLOW;
+    std::cout << "\n  ╔════════════════════════════════════════════════════╗\n";
+    std::cout << "  ║                  ACHIEVEMENTS                      ║\n";
+    std::cout << "  ╚════════════════════════════════════════════════════╝\n\n" << RESET;
+    std::cout << DIM << "  " << achievements.unlockedCount() << " / " << ACH_COUNT << " unlocked\n\n" << RESET;
+
+    for (int i = 0; i < ACH_COUNT; ++i) {
+        AchievementID id = static_cast<AchievementID>(i);
+        const AchievementData& d = achievementData(id);
+        if (achievements.isUnlocked(id)) {
+            std::cout << GREEN << BOLD << "  [x] " << RESET
+                      << BOLD << d.name << RESET
+                      << DIM << " — " << d.description << "\n" << RESET;
+        } else if (d.secret) {
+            std::cout << DIM << "  [ ] ???\n" << RESET;
+        } else {
+            std::cout << DIM << "  [ ] " << d.name << " — " << d.description << "\n" << RESET;
+        }
+    }
+    std::cout << "\n";
     pressEnter();
 }
 
@@ -3179,6 +3258,23 @@ void Game::showVictory(bool trueEnding) {
     std::cout << "  Enemies defeated: " << runState.enemiesDefeated << "\n";
     std::cout << "  Gold earned:      " << runState.totalGoldEarned << "\n";
     std::cout << "  True ending:      " << (trueEnding ? "YES" : "No") << "\n" << RESET;
+
+    // End-of-run achievement checks
+    if (runState.potionsUsedThisRun == 0)
+        if (achievements.unlock(AchievementID::NO_POTIONS))
+            notifyAchievement(AchievementID::NO_POTIONS);
+
+    if (player.getArmor().getName() == "Peasant Clothes")
+        if (achievements.unlock(AchievementID::PEASANT_CLOTHES))
+            notifyAchievement(AchievementID::PEASANT_CLOTHES);
+
+    if (!runState.runeEverEquipped)
+        if (achievements.unlock(AchievementID::RUNELESS))
+            notifyAchievement(AchievementID::RUNELESS);
+
+    if (achievements.onRunCompleted())
+        notifyAchievement(AchievementID::MASTER_PEASANT);
+
     pressEnter();
 }
 
@@ -3263,5 +3359,7 @@ void Game::gameOver() {
         "But you know more now than when you started.\n"
         "The next one will know a little more still.", 14);
     std::cout << "\n" << DIM << "(Permadeath — knowledge survives, the peasant does not)" << RESET << "\n";
+    achievements.onRunFailed();
+    saveAchievements();
     pressEnter();
 }
