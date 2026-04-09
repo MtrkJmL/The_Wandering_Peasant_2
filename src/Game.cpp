@@ -67,6 +67,15 @@ void Game::notifyAchievement(AchievementID id) {
     saveAchievements();
 }
 
+void Game::checkSkillDiscoveryAchievements() {
+    int total = 0;
+    for (auto r : { ItemRarity::COMMON, ItemRarity::RARE, ItemRarity::EPIC, ItemRarity::LEGENDARY })
+        total += (int)getAttackPool(r).size();
+    if ((int)discoveries.attacks.size() >= total)
+        if (achievements.unlock(AchievementID::ALL_SKILLS))
+            notifyAchievement(AchievementID::ALL_SKILLS);
+}
+
 int Game::randInt(int lo, int hi) {
     std::uniform_int_distribution<int> d(lo, hi);
     return d(rng);
@@ -256,7 +265,7 @@ void Game::characterCreation() {
         bool changed = false;
         for (int _i = 0; _i < 3; ++_i)
             changed |= discoveries.recordAttack(player.getAttack(_i).name);
-        if (changed) saveDiscoveries();
+        if (changed) { saveDiscoveries(); checkSkillDiscoveryAchievements(); }
     }
 
     // Starting potions
@@ -477,8 +486,8 @@ void Game::handleCombatNode(int ch, bool isElite) {
 
     // Special behaviour warnings
     const EnemyBehaviour& beh = enemy.getBehaviour();
-    if (beh.dodgesLightAttacks)  std::cout << MAGENTA << "  \xe2\x9a\xa0 Phases through some attacks — keep the pressure varied.\n" << RESET;
-    if (beh.reflectsHeavy)       std::cout << YELLOW  << "  \xe2\x9a\xa0 Reflects heavy damage back at you — time your strikes.\n" << RESET;
+    if (beh.isEvasive)           std::cout << MAGENTA << "  \xe2\x9a\xa0 Slippery — has a chance to dodge your attacks.\n" << RESET;
+    if (beh.mirrorsRepeatSkills) std::cout << YELLOW  << "  \xe2\x9a\xa0 Pattern reader — it reflects damage if you repeat the same move.\n" << RESET;
     if (beh.regenHPPerTurn)      std::cout << GREEN   << "  \xe2\x9a\xa0 Regenerates HP every turn — end the fight quickly.\n" << RESET;
     if (beh.ambushesOnTurnOne)   std::cout << RED     << "  \xe2\x9a\xa0 Ambush! It attacks before you can act.\n" << RESET;
     if (beh.interruptsTimingBar) std::cout << YELLOW  << "  \xe2\x9a\xa0 Disrupts your timing — stay focused.\n" << RESET;
@@ -545,7 +554,7 @@ void Game::handleCombatNode(int ch, bool isElite) {
         // ── Normal enemy drop: attack type ────────────────────────────────────
         bool allowLegendary = (randInt(0, 99) < 3); // 3% legendary chance from normal
         AttackType drop = randomAttackTypeDrop(ch, allowLegendary, player.getLuck());
-        if (discoveries.recordAttack(drop.name)) saveDiscoveries();
+        if (discoveries.recordAttack(drop.name)) { saveDiscoveries(); checkSkillDiscoveryAchievements(); }
         std::cout << Item::getRarityColor(static_cast<ItemRarity>(
                          static_cast<int>(drop.rarity))) << BOLD
                   << "Skill Drop: " << drop.name << RESET
@@ -621,6 +630,10 @@ void Game::handleEventNode(int ch) {
                     if (discoveries.runes.size() >= 5)
                         if (achievements.unlock(AchievementID::RUNE_SCHOLAR))
                             notifyAchievement(AchievementID::RUNE_SCHOLAR);
+                    // All 10 runes discovered
+                    if (discoveries.runes.size() >= 10)
+                        if (achievements.unlock(AchievementID::ALL_RUNES))
+                            notifyAchievement(AchievementID::ALL_RUNES);
                 }
                 std::cout << GREEN << "\nYou learn " << runeName(learned) << ".\n" << RESET;
                 std::cout << DIM << "M'alid nods and looks back at the road.\n" << RESET;
@@ -1473,12 +1486,17 @@ void Game::handleBossNode(int ch) {
     player.addExperience(boss.getExperienceReward());
     std::cout << GREEN << "\n+" << boss.getGoldReward() << " gold. +" << boss.getExperienceReward() << " XP.\n" << RESET;
 
-    // Legendary skill drop from boss
+    // Boss skill drop: 70% Epic, 30% Legendary base — luck increases Legendary chance
     {
-        AttackType legendDrop = randomAttackType(ItemRarity::LEGENDARY);
-        if (discoveries.recordAttack(legendDrop.name)) saveDiscoveries();
-        std::cout << "\n" << Item::getRarityColor(ItemRarity::LEGENDARY) << BOLD
-                  << "★ LEGENDARY SKILL: " << legendDrop.name << RESET
+        int luckBonus  = player.getLuck() / 3;                          // +1% per 3 luck
+        int legChance  = std::min(70, 30 + luckBonus);                  // caps at 70%
+        ItemRarity dropRar = (randInt(0, 99) < legChance)
+                           ? ItemRarity::LEGENDARY : ItemRarity::EPIC;
+        AttackType legendDrop = randomAttackType(dropRar);
+        if (discoveries.recordAttack(legendDrop.name)) { saveDiscoveries(); checkSkillDiscoveryAchievements(); }
+        const char* rarLabel = (dropRar == ItemRarity::LEGENDARY) ? "LEGENDARY" : "EPIC";
+        std::cout << "\n" << Item::getRarityColor(dropRar) << BOLD
+                  << "★ " << rarLabel << " SKILL: " << legendDrop.name << RESET
                   << " [" << legendDrop.getStatsString() << "]\n"
                   << DIM << "  " << legendDrop.description << "\n" << RESET;
         std::cout << "  Replace a skill slot?\n";
@@ -1652,21 +1670,21 @@ void Game::showCombatStatus(const Enemy& enemy) const {
     std::cout << "  ST  " << CYAN << makeBar(ps, psm) << RESET
               << "  " << ps << "/" << psm << "\n";
 
-    // Attack slots with cooldowns
+    // Attack slots with cooldowns.
+    // effectiveCd = cdLeft - 1 because tickCooldowns() fires before the action menu.
+    // A skill with cdLeft == 1 will be ready when the player actually acts this turn.
     for (int _ai = 0; _ai < 3; ++_ai) {
         const AttackType& at = player.getAttack(_ai);
-        int cdLeft = player.getAttackCooldown(_ai);
-        // Cooldown squares: ■ per locked turn, □ per spent turn
+        int cdLeft     = player.getAttackCooldown(_ai);
+        int effectiveCd = (cdLeft > 1) ? cdLeft - 1 : 0; // 0 means ready this turn
         std::string cdBar;
-        if (cdLeft > 0) {
-            for (int _cd = 0; _cd < at.cooldown; ++_cd)
-                cdBar += (_cd < cdLeft) ? "\xe2\x96\xa0" : "\xe2\x96\xa1"; // ■ □
-        }
+        for (int _cd = 0; _cd < effectiveCd; ++_cd)
+            cdBar += "\xe2\x96\xa0"; // ■ per locked turn remaining
         std::cout << "  [" << (_ai+1) << "] "
                   << Item::getRarityColor(at.rarity) << BOLD << at.name << RESET
                   << " " << DIM << at.getStatsString() << RESET;
-        if (cdLeft > 0)
-            std::cout << RED << "  " << cdBar << " cd:" << cdLeft << RESET;
+        if (effectiveCd > 0)
+            std::cout << RED << "  " << cdBar << " cd:" << effectiveCd << RESET;
         else
             std::cout << GREEN << "  \xe2\x9c\x93" << RESET; // ✓
         std::cout << "\n";
@@ -1711,8 +1729,8 @@ void Game::showCombatStatus(const Enemy& enemy) const {
         std::cout << "      " << YELLOW << "\xe2\x97\x89 Blinded (" << enemy.getBlindRounds() << " rounds)" << RESET << "\n";
 
     const EnemyBehaviour& beh = enemy.getBehaviour();
-    if (beh.dodgesLightAttacks) std::cout << "      " << MAGENTA << "⚠ Dodges light attacks"       << RESET << "\n";
-    if (beh.reflectsHeavy)      std::cout << "      " << YELLOW  << "⚠ Reflects heavy attacks"     << RESET << "\n";
+    if (beh.isEvasive)           std::cout << "      " << MAGENTA << "⚠ Evasive — 20% dodge chance"       << RESET << "\n";
+    if (beh.mirrorsRepeatSkills) std::cout << "      " << YELLOW  << "⚠ Mirrors repeated skills"           << RESET << "\n";
     if (beh.regenHPPerTurn)     std::cout << "      " << GREEN   << "⚠ Regenerates " << beh.regenAmount << " HP/turn" << RESET << "\n";
     if (enemy.isTelegraphing()) std::cout << "      " << YELLOW  << "⚠ Winding up a massive blow!" << RESET << "\n";
 
@@ -1745,16 +1763,16 @@ void Game::showCombatStatusBoss(const Boss& boss) const {
 
     for (int _ai = 0; _ai < 3; ++_ai) {
         const AttackType& at = player.getAttack(_ai);
-        int cdLeft = player.getAttackCooldown(_ai);
+        int cdLeft      = player.getAttackCooldown(_ai);
+        int effectiveCd = (cdLeft > 1) ? cdLeft - 1 : 0;
         std::string cdBar;
-        if (cdLeft > 0)
-            for (int _cd = 0; _cd < at.cooldown; ++_cd)
-                cdBar += (_cd < cdLeft) ? "\xe2\x96\xa0" : "\xe2\x96\xa1";
+        for (int _cd = 0; _cd < effectiveCd; ++_cd)
+            cdBar += "\xe2\x96\xa0";
         std::cout << "  [" << (_ai+1) << "] "
                   << Item::getRarityColor(at.rarity) << BOLD << at.name << RESET
                   << " " << DIM << at.getStatsString() << RESET;
-        if (cdLeft > 0)
-            std::cout << RED << "  " << cdBar << " cd:" << cdLeft << RESET;
+        if (effectiveCd > 0)
+            std::cout << RED << "  " << cdBar << " cd:" << effectiveCd << RESET;
         else
             std::cout << GREEN << "  \xe2\x9c\x93" << RESET;
         std::cout << "\n";
@@ -1801,7 +1819,7 @@ void Game::showCombatStatusBoss(const Boss& boss) const {
 
 // ── Player attack turn (enemy) ────────────────────────────────────────────────
 
-void Game::playerAttackTurn(Enemy& enemy, bool& enemyDead) {
+void Game::playerAttackTurn(Enemy& enemy, bool& enemyDead, int& lastUsedSlot) {
     const EnemyBehaviour& beh = enemy.getBehaviour();
 
     // Brute telegraph: set randomly if not already set
@@ -1823,10 +1841,11 @@ void Game::playerAttackTurn(Enemy& enemy, bool& enemyDead) {
             const AttackType& at = player.getAttack(_i);
             if (player.isAttackReady(_i)) {
                 std::cout << BOLD << YELLOW << "  [ " << (_i+1) << " ]" << RESET
-                          << "  " << at.name << DIM << "  · " << at.getStatsString() << RESET << "\n";
+                          << "  " << at.name << DIM << "  · " << at.getStatsString()
+                          << "  cd:" << at.cooldown << RESET << "\n";
             } else {
                 std::cout << DIM << "  [ " << (_i+1) << " ]"
-                          << "  " << at.name << "  [cooldown: " << player.getAttackCooldown(_i) << "]\n" << RESET;
+                          << "  " << at.name << "  [cd:" << player.getAttackCooldown(_i) << " turns]\n" << RESET;
             }
         }
         std::cout << BOLD << YELLOW << "  [ 4 ]" << RESET << "  Rest             " << DIM << "· recover all stamina\n" << RESET;
@@ -1917,7 +1936,7 @@ void Game::playerAttackTurn(Enemy& enemy, bool& enemyDead) {
             int critPos  = 10;
             int cursorPos = interrupted ? randInt(0, 5) : runTimingBar(true, critPos, critWidthBonus);
 
-            // Death's Bargain: damage is 40% of missing HP, skip timing roll
+            // Death's Bargain: damage is 40% of missing HP, scaled by timing
             int dmg = 0;
             if (at.effect == AttackEffect::POISON_BURST) {
                 int stacks = enemy.getPoisonStacks();
@@ -1927,9 +1946,23 @@ void Game::playerAttackTurn(Enemy& enemy, bool& enemyDead) {
                           << " = " << dmg << " damage! Poison cleared.\n" << RESET;
             } else if (at.effect == AttackEffect::DAMAGE_FROM_MISSING_HP) {
                 int missing = player.getMaxHealth() - player.getHealth();
-                dmg = std::max(1, static_cast<int>(missing * 0.4f));
+                int base = std::max(1, static_cast<int>(missing * 0.4f));
+                // Apply timing multiplier (bar already ran above)
+                float dist = std::abs((float)(cursorPos - critPos));
+                float mult = 2.0f - 1.5f * std::min(1.0f, dist / 10.0f);
+                if (mult >= 2.0f) {
+                    isCrit = true;
+                    std::cout << YELLOW << BOLD << "CRITICAL HIT! Perfect timing!\n" << RESET;
+                } else if (mult <= 0.7f) {
+                    std::cout << RED << "Poor timing — weak hit!\n" << RESET;
+                }
+                player.useStamina(1);
+                dmg = std::max(1, static_cast<int>(base * mult));
                 std::cout << YELLOW << "[DEATH'S BARGAIN] Missing HP: " << missing
                           << " → " << dmg << " damage!\n" << RESET;
+                // Bloodhunger rune: crit x1.5
+                if (isCrit && player.hasRune(RuneType::BLOODHUNGER))
+                    dmg = static_cast<int>(dmg * 1.5f);
                 // Self-heal component
                 if (at.effectValue > 0) {
                     player.heal(at.effectValue);
@@ -2010,21 +2043,22 @@ void Game::playerAttackTurn(Enemy& enemy, bool& enemyDead) {
                 }
             }
 
-            // Marsh Wraith: phased — but since all attacks are now "heavy style",
-            // Wraith dodges on a 50% chance instead of guaranteed
-            if (beh.dodgesLightAttacks && randInt(0, 1) == 0) {
-                std::cout << MAGENTA << "The Wraith phases through your attack!\n" << RESET;
+            // Marsh Wraith: 20% random dodge
+            if (beh.isEvasive && randInt(0, 4) == 0) {
+                std::cout << MAGENTA << "The Wraith slips aside — your attack finds nothing!\n" << RESET;
                 player.startCooldown(slot);
+                lastUsedSlot = slot;
                 return;
             }
 
-            // Ash Titan: reflect 50% of damage back
-            if (beh.reflectsHeavy) {
+            // Ash Titan: reflects damage when player repeats the same skill slot
+            if (beh.mirrorsRepeatSkills && slot == lastUsedSlot) {
                 int reflected = dmg / 2;
                 player.takeDamage(reflected);
-                std::cout << RED << "The Titan reflects " << reflected << " damage back at you!\n" << RESET;
+                std::cout << YELLOW << "The Titan read your pattern — " << reflected << " damage reflected back at you!\n" << RESET;
                 dmg /= 2;
             }
+            lastUsedSlot = slot;
 
             int def = 0;
             if (player.getBuffs().phantomsDraughtActive) {
@@ -2034,10 +2068,9 @@ void Game::playerAttackTurn(Enemy& enemy, bool& enemyDead) {
                 def = enemy.rollDefense();
             }
 
-            // Mirror Strike: reflect effect (handled before dealing dmg)
+            // Mirror Strike: store reflect % — applied in enemyAttackTurn
             if (at.effect == AttackEffect::REFLECT_DAMAGE) {
-                player.getBuffs().attackTypeDefenseThisTurn += (def * at.effectValue / 100);
-                // Reflect value stored; enemy takes it later in enemyAttackTurn via rollDefense
+                player.getBuffs().attackTypeDefenseThisTurn = at.effectValue; // e.g. 50 = 50%
             }
 
             int net = std::max(1, dmg - def);
@@ -2351,15 +2384,16 @@ void Game::enemyAttackTurn(Enemy& enemy) {
         if (player.hasRune(RuneType::PREDATOR) && enemy.isBleeding())
             dmg = std::max(1, static_cast<int>(dmg * 0.60f));
 
-        // Mirror Strike reflect: deal back a portion of damage
-        if (player.getBuffs().attackTypeDefenseThisTurn > 0) {
-            // Mirror Strike stores reflect as defense buff; reflect = atk * 50%
-            // We already reduced dmg by rollDefense which includes attackTypeDefenseThisTurn.
-            // Reflect: enemy takes atk * effectValue% / 100
-        }
-
         player.takeDamage(dmg);
         std::cout << RED << enemy.getName() << " hits you for " << dmg << " damage.\n" << RESET;
+
+        // Mirror Strike: reflect a % of damage dealt back at the enemy
+        if (player.getBuffs().attackTypeDefenseThisTurn > 0) {
+            int reflected = std::max(1, dmg * player.getBuffs().attackTypeDefenseThisTurn / 100);
+            enemy.takeDamage(reflected);
+            std::cout << CYAN << "[MIRROR STRIKE] " << reflected << " damage reflected back!\n" << RESET;
+            player.getBuffs().attackTypeDefenseThisTurn = 0;
+        }
 
         // Enemy status procs on player
         if (beh.appliesBleed && !player.getBuffs().bleeding
@@ -2451,13 +2485,15 @@ bool Game::runCombat(Enemy& enemy) {
                   << player.getPotions()[idx].name << " for this fight.\n" << RESET;
     }
 
+    int lastUsedSlot = -1; // tracks last skill slot used (for Ash Titan mirroring)
+
     while (enemy.isAlive() && player.isAlive()) {
         showCombatStatus(enemy);
         player.tickBuffs();
         if (!player.isAlive()) break;
 
         bool enemyDead = false;
-        playerAttackTurn(enemy, enemyDead);
+        playerAttackTurn(enemy, enemyDead, lastUsedSlot);
         if (enemyDead) break;
         if (!player.isAlive()) break;
 
@@ -2491,10 +2527,11 @@ void Game::playerAttackTurnBoss(Boss& boss, bool& bossDead) {
             const AttackType& at = player.getAttack(_i);
             if (player.isAttackReady(_i))
                 std::cout << BOLD << YELLOW << "  [ " << (_i+1) << " ]" << RESET
-                          << "  " << at.name << DIM << "  · " << at.getStatsString() << RESET << "\n";
+                          << "  " << at.name << DIM << "  · " << at.getStatsString()
+                          << "  cd:" << at.cooldown << RESET << "\n";
             else
                 std::cout << DIM << "  [ " << (_i+1) << " ]  " << at.name
-                          << "  [cooldown: " << player.getAttackCooldown(_i) << "]\n" << RESET;
+                          << "  [cd:" << player.getAttackCooldown(_i) << " turns]\n" << RESET;
         }
         std::cout << BOLD << YELLOW << "  [ 4 ]" << RESET << "  Rest             " << DIM << "· recover all stamina\n" << RESET;
         std::cout << BOLD << YELLOW << "  [ 5 ]" << RESET << "  Inventory        " << DIM << "· free action\n" << RESET;
@@ -2555,13 +2592,30 @@ void Game::playerAttackTurnBoss(Boss& boss, bool& bossDead) {
 
             player.getBuffs().attackTypeDefenseThisTurn = at.defenseBonus;
 
-            // Death's Bargain: damage is 40% of missing HP, skip timing roll
+            // Run timing bar upfront (used by Death's Bargain and normal attacks)
+            int critWidthBonus = player.hasRune(RuneType::STEADY_EYE) ? 2 : 0;
+            int critPos  = 10;
+            int cursorPos = runTimingBar(true, critPos, critWidthBonus);
+
             int dmg = 0;
             if (at.effect == AttackEffect::DAMAGE_FROM_MISSING_HP) {
                 int missing = player.getMaxHealth() - player.getHealth();
-                dmg = std::max(1, static_cast<int>(missing * 0.4f));
+                int base = std::max(1, static_cast<int>(missing * 0.4f));
+                // Apply timing multiplier
+                float dist = std::abs((float)(cursorPos - critPos));
+                float mult = 2.0f - 1.5f * std::min(1.0f, dist / 10.0f);
+                if (mult >= 2.0f) {
+                    isCrit = true;
+                    std::cout << YELLOW << BOLD << "CRITICAL HIT! Perfect timing!\n" << RESET;
+                } else if (mult <= 0.7f) {
+                    std::cout << RED << "Poor timing — weak hit!\n" << RESET;
+                }
+                player.useStamina(1);
+                dmg = std::max(1, static_cast<int>(base * mult));
                 std::cout << YELLOW << "[DEATH'S BARGAIN] Missing HP: " << missing
                           << " → " << dmg << " damage!\n" << RESET;
+                if (isCrit && player.hasRune(RuneType::BLOODHUNGER))
+                    dmg = static_cast<int>(dmg * 1.5f);
                 if (at.effectValue > 0) {
                     player.heal(at.effectValue);
                     std::cout << GREEN << "[DEATH'S BARGAIN] Restored " << at.effectValue << " HP.\n" << RESET;
@@ -2616,9 +2670,6 @@ void Game::playerAttackTurnBoss(Boss& boss, bool& bossDead) {
                     player.getBuffs().doubleNextDamage = false;
                 }
 
-                int critWidthBonus = player.hasRune(RuneType::STEADY_EYE) ? 2 : 0;
-                int critPos  = 10;
-                int cursorPos = runTimingBar(true, critPos, critWidthBonus);
                 dmg = player.timingBasedAttack(cursorPos, critPos, 20, baseRoll, isCrit);
                 if (dmg == 0) { continue; }
 
@@ -2889,6 +2940,14 @@ void Game::enemyAttackTurnBoss(Boss& boss) {
 
     player.takeDamage(dmg);
     std::cout << RED << boss.getName() << " attacks for " << dmg << " damage.\n" << RESET;
+
+    // Mirror Strike: reflect a % of damage dealt back at the boss
+    if (player.getBuffs().attackTypeDefenseThisTurn > 0) {
+        int reflected = std::max(1, dmg * player.getBuffs().attackTypeDefenseThisTurn / 100);
+        boss.takeDamage(reflected);
+        std::cout << CYAN << "[MIRROR STRIKE] " << reflected << " damage reflected back!\n" << RESET;
+        player.getBuffs().attackTypeDefenseThisTurn = 0;
+    }
 }
 
 bool Game::runBossFight(Boss& boss) {

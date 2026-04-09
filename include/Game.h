@@ -42,7 +42,7 @@ private:
     // ── Combat ─────────────────────────────────────────────────
     bool runCombat(Enemy& enemy);
     bool runBossFight(Boss& boss);
-    void playerAttackTurn(Enemy& enemy, bool& enemyDead);
+    void playerAttackTurn(Enemy& enemy, bool& enemyDead, int& lastUsedSlot);
     void playerAttackTurnBoss(Boss& boss, bool& bossDead);
     void enemyAttackTurn(Enemy& enemy);
     void enemyAttackTurnBoss(Boss& boss);
@@ -72,6 +72,7 @@ private:
     void saveDiscoveries();
     void saveAchievements();
     void notifyAchievement(AchievementID id);
+    void checkSkillDiscoveryAchievements(); // checks ALL_SKILLS after any recordAttack
 
     // ── Achievement screen ─────────────────────────────────────
     void showAchievements();

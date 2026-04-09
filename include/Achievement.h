@@ -14,9 +14,11 @@ enum class AchievementID {
     // Skill / discovery
     FIRST_RUNE,
     RUNE_SCHOLAR,
+    ALL_RUNES,
     WORDSMITH,
     BARGAINER,
     FULLY_FORGED,
+    ALL_SKILLS,
     MASTER_PEASANT,
 
     COUNT_  // sentinel — keep last

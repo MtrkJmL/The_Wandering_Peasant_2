@@ -1,0 +1,15 @@
+# Build output
+build/
+
+# Save data (per-player, not source)
+*.dat
+
+# IDE / editor
+.vs/
+*.user
+*.suo
+.vscode/
+
+# OS
+Thumbs.db
+.DS_Store

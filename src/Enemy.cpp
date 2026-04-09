@@ -70,7 +70,7 @@ static EnemyTemplate tmpl(EnemyType t) {
         e.name = "Marsh Wraith";
         e.baseHP = 70; e.hpPerChapter = 20;
         e.goldBase = 25; e.xpBase = 35;
-        e.behaviour.dodgesLightAttacks = true;
+        e.behaviour.isEvasive = true;
         e.wDC=1; e.wDS=8; e.wMod=2;
         e.aDC=1; e.aDS=4; e.aMod=1;
         e.talkable = false; e.bribeMult = 4;
@@ -120,8 +120,8 @@ static EnemyTemplate tmpl(EnemyType t) {
         e.name = "Ash Titan";
         e.baseHP = 200; e.hpPerChapter = 50;
         e.goldBase = 45; e.xpBase = 60;
-        e.behaviour.reflectsHeavy = true;
-        e.behaviour.isTank        = true;
+        e.behaviour.mirrorsRepeatSkills = true;
+        e.behaviour.isTank              = true;
         e.wDC=2; e.wDS=10; e.wMod=4;
         e.aDC=2; e.aDS=8;  e.aMod=3;
         e.talkable = false; e.bribeMult = 9;
@@ -287,12 +287,12 @@ std::string Enemy::getDescription() const {
     case EnemyType::SCORCHED_BRUTE:     return "A hulking mass of char and fury. Slow — but telegraphs devastating blows.";
     case EnemyType::EMBER_WITCH:        return "Fingers like burned twigs. Leaves you smouldering.";
     case EnemyType::ASH_HOUND:          return "A skeletal dog made of cinders. Strikes twice before you blink.";
-    case EnemyType::MARSH_WRAITH:       return "A ghost of smoke and rot. Light attacks pass straight through.";
+    case EnemyType::MARSH_WRAITH:       return "A ghost of smoke and rot. It slips through attacks without warning.";
     case EnemyType::BOG_COLOSSUS:       return "Ancient mud given form. It heals unless you hit hard enough to matter.";
     case EnemyType::PLAGUE_SHAMAN:      return "Its touch rots your supplies. A potion will fail when you need it most.";
     case EnemyType::MIRE_LURKER:        return "You didn't see it until it was already moving.";
     case EnemyType::DARKBLOOD_SENTINEL: return "Armoured in obsidian plate. It will interrupt your swing mid-arc.";
-    case EnemyType::ASH_TITAN:          return "Immense. Every heavy blow you land comes back at you.";
+    case EnemyType::ASH_TITAN:          return "Immense. It reads your patterns — repeat the same move and it turns your own force against you.";
     case EnemyType::SOUL_BINDER:        return "It reaches into your pack and locks something shut. You won't know what until you need it.";
     case EnemyType::DARKBLOOD_ZEALOT:   return "Frenzied devotee. It will either kill you or die in two hits.";
     }

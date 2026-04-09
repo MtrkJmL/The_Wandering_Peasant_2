@@ -12,9 +12,11 @@ static const AchievementData ACHIEVEMENT_DATA[ACH_COUNT] = {
     { "RUNELESS",               "Runeless",                   "Complete a run without ever equipping a rune.",         false },
     { "FIRST_RUNE",             "M'alid's First Lesson",      "Learn your first rune from M'alid.",                   false },
     { "RUNE_SCHOLAR",           "Rune Scholar",               "Learn 5 different runes across all your runs.",         false },
+    { "ALL_RUNES",              "Archivist of the Ash",       "Discover all 10 runes across your runs.",               false },
     { "WORDSMITH",              "Wordsmith",                  "Exit combat via Talk 3 times in one run.",              false },
     { "BARGAINER",              "Bargainer",                  "Exit combat via Bargain 3 times in one run.",           false },
     { "FULLY_FORGED",           "Fully Forged",               "Upgrade a weapon to its maximum tier.",                 false },
+    { "ALL_SKILLS",             "The Full Arsenal",           "Discover every skill across all your runs.",            false },
     { "MASTER_PEASANT",         "Master Peasant",             "Complete 3 runs in a row without dying.",               false },
 };
 

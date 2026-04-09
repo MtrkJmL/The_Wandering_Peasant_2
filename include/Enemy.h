@@ -22,12 +22,12 @@ enum class EnemyType {
 
 // Special per-enemy combat behaviours
 struct EnemyBehaviour {
-    bool dodgesLightAttacks  = false; // Marsh Wraith
+    bool isEvasive           = false; // Marsh Wraith — 20% dodge chance each attack
     bool regenHPPerTurn      = false; // Bog Colossus — +8 HP/turn
     bool poisonsInventory    = false; // Plague Shaman — permanently destroys a potion
     bool ambushesOnTurnOne   = false; // Mire Lurker — attacks before player turn 1
     bool interruptsTimingBar = false; // Darkblood Sentinel — random bar-stop
-    bool reflectsHeavy       = false; // Ash Titan — reflects heavy dmg back
+    bool mirrorsRepeatSkills = false; // Ash Titan — reflects damage if player repeats same skill slot
     bool locksItemSlot       = false; // Soul Binder — locks one slot whole fight
     bool attacksTwice        = false; // Ash Hound — two attacks per turn; applies Bleed
     bool appliesBlind        = false; // Ember Witch — player is blinded (30% miss, 2 rounds)
