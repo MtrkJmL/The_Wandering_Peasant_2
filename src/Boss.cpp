@@ -14,6 +14,7 @@ Boss::Boss(BossType t, int chapter) : type(t), phase(0) {
         phases = {
             { 100, 2, "Varek snarls. \"You actually hurt me. Interesting.\"" },
         };
+        bleedResistPct = 15;
         break;
     case BossType::WITCH_OF_GHAAL:
         name             = "The Witch of G'haal";
@@ -26,6 +27,7 @@ Boss::Boss(BossType t, int chapter) : type(t), phase(0) {
             { 140, 3, "The Witch laughs — a horrible wet sound. \"You have no idea, do you?\"" },
             {  60, 5, "Spectral fire pours from her eyes. \"Fine. I'll show you what we've been fighting.\"" },
         };
+        poisonResistPct = 15;
         break;
     case BossType::DARKBLOOD_LORD:
         name             = "Darkblood Lord Szathos";
@@ -38,6 +40,7 @@ Boss::Boss(BossType t, int chapter) : type(t), phase(0) {
             { 200, 4, "Szathos slams the earth. \"I will not fall to a peasant.\"" },
             {  80, 7, "The obsidian cracks. Something inside him screams." },
         };
+        blindResistPct = 15;
         break;
     case BossType::SLAVE_KING_AMAX:
         name             = "Slave King Amax";
@@ -65,6 +68,28 @@ int         Boss::getMaxHealth()     const { return maxHealth; }
 int         Boss::getCurrentPhase()  const { return phase; }
 int         Boss::getGoldReward()    const { return goldReward; }
 int         Boss::getExperienceReward() const { return experienceReward; }
+
+void Boss::applyBleed()            { bleedStacks = 1; }
+void Boss::applyPoison(int stacks) { poisonStacks += stacks; }
+void Boss::applyBlind(int rounds)  { blindRounds = std::max(blindRounds, rounds); }
+void Boss::clearBleed()            { bleedStacks = 0; }
+void Boss::clearPoison()           { poisonStacks = 0; }
+bool Boss::isBleeding()  const { return bleedStacks > 0; }
+bool Boss::isPoisoned()  const { return poisonStacks > 0; }
+bool Boss::isBlinded()   const { return blindRounds > 0; }
+int  Boss::getPoisonStacks() const { return poisonStacks; }
+int  Boss::getBlindRounds()  const { return blindRounds; }
+int  Boss::tickBleed()  { return 2; }
+int  Boss::tickPoison() {
+    if (poisonStacks <= 0) return 0;
+    int dmg = poisonStacks;
+    --poisonStacks;
+    return dmg;
+}
+void Boss::tickBlind()  { if (blindRounds > 0) --blindRounds; }
+int  Boss::getBleedResistPct()  const { return bleedResistPct; }
+int  Boss::getPoisonResistPct() const { return poisonResistPct; }
+int  Boss::getBlindResistPct()  const { return blindResistPct; }
 
 void Boss::takeDamage(int dmg) { health = std::max(0, health - dmg); }
 bool Boss::isAlive()           const { return health > 0; }

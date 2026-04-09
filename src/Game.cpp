@@ -1745,6 +1745,13 @@ void Game::showCombatStatusBoss(const Boss& boss) const {
     std::cout << "  HP  " << hpColor(bh, bhm) << makeBar(bh, bhm) << RESET
               << "  " << bh << "/" << bhm << "\n";
 
+    if (boss.isBleeding())
+        std::cout << "      " << RED    << "\xe2\x99\xa5 Bleeding (2/turn)" << RESET << "\n";
+    if (boss.isPoisoned())
+        std::cout << "      " << "\033[32m" << "\xe2\x98\xa0 Poisoned (" << boss.getPoisonStacks() << " stacks)" << RESET << "\n";
+    if (boss.isBlinded())
+        std::cout << "      " << YELLOW << "\xe2\x97\x89 Blinded (" << boss.getBlindRounds() << " rounds)" << RESET << "\n";
+
     std::cout << "\n";
     std::cout << RED << BOLD
               << "  ══════════════════════════════════════════════════════════\n"
@@ -2156,20 +2163,15 @@ void Game::playerAttackTurn(Enemy& enemy, bool& enemyDead) {
                     std::cout << GREEN << " Healed " << at.effectValue << " HP." << RESET
                               << " (+" << at.defenseBonus << " def this turn)\n";
                     break;
-                case AttackEffect::APPLY_POISON_ADD: {
+                case AttackEffect::APPLY_POISON_ADD:
                     if (statusProc()) {
-                        int addStacks = at.effectValue;
-                        if (enemy.isBleeding()) addStacks += at.effectValue;
-                        enemy.applyPoison(addStacks);
-                        std::cout << RED << "[PLAGUE TOUCH] +" << addStacks << " poison stacks";
-                        if (addStacks > at.effectValue)
-                            std::cout << " (doubled — enemy bleeding)";
-                        std::cout << "!\n" << RESET;
+                        enemy.applyPoison(at.effectValue);
+                        std::cout << RED << "[PLAGUE TOUCH] +" << at.effectValue << " poison stacks on "
+                                  << enemy.getName() << "!\n" << RESET;
                     } else {
                         std::cout << DIM << "[PLAGUE TOUCH] " << enemy.getName() << " resists.\n" << RESET;
                     }
                     break;
-                }
                 case AttackEffect::DOUBLE_POISON_STACKS: {
                     int cur = enemy.getPoisonStacks();
                     if (cur > 0) {
@@ -2528,6 +2530,12 @@ void Game::playerAttackTurnBoss(Boss& boss, bool& bossDead) {
                     player.getBuffs().rageDraughtActive = false;
                     std::cout << YELLOW << "Rage Draught surges through you!\n" << RESET;
                 }
+            } else if (at.effect == AttackEffect::POISON_BURST) {
+                int stacks = boss.getPoisonStacks();
+                dmg = std::max(1, stacks * at.effectValue);
+                boss.clearPoison();
+                std::cout << RED << "[TOXIC BLOOM] " << stacks << " stacks × " << at.effectValue
+                          << " = " << dmg << " damage! Poison cleared.\n" << RESET;
             } else {
                 int baseRoll = at.roll() + player.getWeapon().getModifier();
 
@@ -2555,6 +2563,12 @@ void Game::playerAttackTurnBoss(Boss& boss, bool& bossDead) {
                     std::cout << RED << "[DESPERATE STRIKE] Pain becomes power!\n" << RESET;
                 }
 
+                // Shadow Press: x2 if boss is blinded
+                if (at.effect == AttackEffect::BLIND_AMPLIFY && boss.isBlinded()) {
+                    baseRoll *= 2;
+                    std::cout << YELLOW << "[SHADOW PRESS] They can't see it coming!\n" << RESET;
+                }
+
                 if (player.getBuffs().doubleNextDamage) {
                     baseRoll *= 2;
                     std::cout << YELLOW << "[VOID BULWARK] Double damage!\n" << RESET;
@@ -2579,6 +2593,25 @@ void Game::playerAttackTurnBoss(Boss& boss, bool& bossDead) {
                 def = boss.rollDefense();
             }
             int net = std::max(1, dmg - def);
+
+            // Bloodburst: burst bonus if boss is bleeding, then consume bleed
+            if (at.effect == AttackEffect::BLEED_BURST && boss.isBleeding()) {
+                net += at.effectValue;
+                boss.clearBleed();
+                std::cout << RED << "[BLOODBURST] +" << at.effectValue << " burst damage! Bleed consumed.\n" << RESET;
+            }
+
+            // Overload: bonus damage per boss status stacks
+            if (at.effect == AttackEffect::STATUS_OVERLOAD) {
+                int totalStacks = (boss.isBleeding() ? 1 : 0) + boss.getPoisonStacks() + boss.getBlindRounds();
+                if (totalStacks > 0) {
+                    int bonus = totalStacks * 3;
+                    net += bonus;
+                    std::cout << RED << "[OVERLOAD] " << totalStacks << " stacks × 3 = +"
+                              << bonus << " damage!\n" << RESET;
+                }
+            }
+
             boss.takeDamage(net);
             if (isCrit) {
                 std::cout << YELLOW << BOLD
@@ -2593,7 +2626,13 @@ void Game::playerAttackTurnBoss(Boss& boss, bool& bossDead) {
                           << " [" << at.name << "]\n";
             }
 
-            // Attack effects (player-side buffs; boss has no status effect support)
+            // Boss proc chance: 80% base + luck bonus - boss resistance
+            auto bossProc = [&](int resistPct) -> bool {
+                int chance = std::min(95, 80 + player.getLuck() / 2) - resistPct;
+                return randInt(0, 99) < chance;
+            };
+
+            // Attack effects
             switch (at.effect) {
                 case AttackEffect::COMBO_SETUP:
                     player.getBuffs().comboSetupBonus = at.effectValue;
@@ -2621,25 +2660,129 @@ void Game::playerAttackTurnBoss(Boss& boss, bool& bossDead) {
                     player.getBuffs().restHealBonus += at.effectValue;
                     std::cout << CYAN << "[STILLNESS] Rest soon to recover " << at.effectValue << " HP.\n" << RESET;
                     break;
+                case AttackEffect::APPLY_BLEED:
+                    if (bossProc(boss.getBleedResistPct())) {
+                        boss.applyBleed();
+                        std::cout << RED << "[BLEED] applied to " << boss.getName() << "!\n" << RESET;
+                    } else {
+                        std::cout << DIM << "[BLEED] " << boss.getName() << " resists.\n" << RESET;
+                    }
+                    break;
+                case AttackEffect::APPLY_POISON:
+                    if (bossProc(boss.getPoisonResistPct())) {
+                        boss.applyPoison(at.effectValue);
+                        std::cout << RED << "[POISON] " << at.effectValue << " stacks on "
+                                  << boss.getName() << "!\n" << RESET;
+                    } else {
+                        std::cout << DIM << "[POISON] " << boss.getName() << " resists.\n" << RESET;
+                    }
+                    break;
+                case AttackEffect::APPLY_BLIND:
+                    if (bossProc(boss.getBlindResistPct())) {
+                        boss.applyBlind(at.effectValue);
+                        std::cout << YELLOW << "[BLIND] " << boss.getName()
+                                  << " blinded (" << at.effectValue << " rounds)!\n" << RESET;
+                    } else {
+                        std::cout << DIM << "[BLIND] " << boss.getName() << " resists.\n" << RESET;
+                    }
+                    break;
+                case AttackEffect::APPLY_BLEED_AND_POISON: {
+                    bool bHit = bossProc(boss.getBleedResistPct());
+                    bool pHit = bossProc(boss.getPoisonResistPct());
+                    if (bHit) { boss.applyBleed();              std::cout << RED << "[ASH CURSE] Bleed!\n" << RESET; }
+                    if (pHit) { boss.applyPoison(at.effectValue); std::cout << RED << "[ASH CURSE] Poison (" << at.effectValue << ")!\n" << RESET; }
+                    if (!bHit && !pHit) std::cout << DIM << "[ASH CURSE] " << boss.getName() << " resists.\n" << RESET;
+                    break;
+                }
+                case AttackEffect::APPLY_ALL_THREE: {
+                    bool bHit = bossProc(boss.getBleedResistPct());
+                    bool dHit = bossProc(boss.getBlindResistPct());
+                    bool pHit = bossProc(boss.getPoisonResistPct());
+                    if (bHit) { boss.applyBleed();              std::cout << RED    << "[GOSPEL] Bleed!\n"              << RESET; }
+                    if (dHit) { boss.applyBlind(3);             std::cout << YELLOW << "[GOSPEL] Blind (3)!\n"          << RESET; }
+                    if (pHit) { boss.applyPoison(at.effectValue); std::cout << RED  << "[GOSPEL] Poison (" << at.effectValue << ")!\n" << RESET; }
+                    if (!bHit && !dHit && !pHit) std::cout << DIM << "[GOSPEL OF ASH] " << boss.getName() << " resists all.\n" << RESET;
+                    break;
+                }
                 case AttackEffect::APPLY_POISON_AND_COMBO:
-                    // Boss has no poison support — apply combo bonus only
+                    if (bossProc(boss.getPoisonResistPct()))
+                        boss.applyPoison(at.effectValue);
                     player.getBuffs().comboSetupBonus += at.effectValue;
-                    std::cout << CYAN << "[TOXIN BARB] Next attack +" << at.effectValue << " damage.\n" << RESET;
+                    std::cout << RED << "[TOXIN BARB] Poison (" << at.effectValue << "). Next attack +"
+                              << at.effectValue << " damage.\n" << RESET;
                     break;
                 case AttackEffect::APPLY_BLEED_DEF_HEAL:
+                    if (bossProc(boss.getBleedResistPct())) {
+                        boss.applyBleed();
+                        std::cout << RED << "[BLOOD REAPER] Bleed applied!" << RESET;
+                    } else {
+                        std::cout << DIM << "[BLOOD REAPER] Bleed resisted." << RESET;
+                    }
                     player.heal(at.effectValue);
-                    std::cout << GREEN << "[BLOOD REAPER] Healed " << at.effectValue << " HP."
-                              << " (+" << at.defenseBonus << " def this turn)\n" << RESET;
+                    std::cout << GREEN << " Healed " << at.effectValue << " HP." << RESET
+                              << " (+" << at.defenseBonus << " def this turn)\n";
                     break;
                 case AttackEffect::APPLY_POISON_ADD:
-                case AttackEffect::DOUBLE_POISON_STACKS:
+                    if (bossProc(boss.getPoisonResistPct())) {
+                        boss.applyPoison(at.effectValue);
+                        std::cout << RED << "[PLAGUE TOUCH] +" << at.effectValue << " poison stacks on "
+                                  << boss.getName() << "!\n" << RESET;
+                    } else {
+                        std::cout << DIM << "[PLAGUE TOUCH] " << boss.getName() << " resists.\n" << RESET;
+                    }
+                    break;
+                case AttackEffect::DOUBLE_POISON_STACKS: {
+                    int cur = boss.getPoisonStacks();
+                    if (cur > 0 && bossProc(boss.getPoisonResistPct())) {
+                        boss.applyPoison(cur);
+                        std::cout << RED << "[VENOM SURGE] Poison doubled: "
+                                  << cur << " → " << (cur * 2) << " stacks!\n" << RESET;
+                    } else {
+                        std::cout << DIM << "[VENOM SURGE] " << (cur > 0 ? boss.getName() + " resists." : "No poison to double.") << "\n" << RESET;
+                    }
+                    break;
+                }
                 case AttackEffect::BLIND_IF_POISONED:
+                    if (bossProc(boss.getBleedResistPct())) {
+                        boss.applyBleed();
+                        std::cout << RED << "[INFECTED WOUND] Bleed applied!\n" << RESET;
+                        if (boss.isPoisoned() && bossProc(boss.getBlindResistPct())) {
+                            boss.applyBlind(3);
+                            std::cout << YELLOW << "[INFECTED WOUND] Poison detected — Blind (3) applied!\n" << RESET;
+                        }
+                    } else {
+                        std::cout << DIM << "[INFECTED WOUND] " << boss.getName() << " resists.\n" << RESET;
+                    }
+                    break;
+                case AttackEffect::PERM_BLEED_NO_REGEN:
+                    if (bossProc(boss.getBleedResistPct())) {
+                        boss.applyBleed();
+                        std::cout << RED << "[IMMORTAL SCAR] Permanent bleed applied.\n" << RESET;
+                    } else {
+                        std::cout << DIM << "[IMMORTAL SCAR] Bleed resisted.\n" << RESET;
+                    }
+                    break;
+                case AttackEffect::APPLY_ALL_STATUSES: {
+                    bool anyActive = boss.isBleeding() || boss.isPoisoned() || boss.isBlinded();
+                    if (anyActive) {
+                        if (!boss.isBleeding() && bossProc(boss.getBleedResistPct())) { boss.applyBleed();   std::cout << RED    << "[RECKONING] Bleed!\n" << RESET; }
+                        if (!boss.isPoisoned() && bossProc(boss.getPoisonResistPct())) { boss.applyPoison(4); std::cout << RED    << "[RECKONING] Poison (4)!\n" << RESET; }
+                        if (!boss.isBlinded()  && bossProc(boss.getBlindResistPct())) { boss.applyBlind(3);  std::cout << YELLOW << "[RECKONING] Blind (3)!\n" << RESET; }
+                    } else {
+                        std::cout << DIM << "[ASHEN RECKONING] No active status to spread.\n" << RESET;
+                    }
+                    break;
+                }
                 case AttackEffect::BLIND_AMPLIFY:
+                    if (!boss.isBlinded())
+                        std::cout << DIM << "[SHADOW PRESS] No blind — normal damage.\n" << RESET;
+                    break;
                 case AttackEffect::BLEED_BURST:
+                    if (!boss.isBleeding())
+                        std::cout << DIM << "[BLOODBURST] No bleed to burst.\n" << RESET;
+                    break;
                 case AttackEffect::STATUS_OVERLOAD:
                 case AttackEffect::POISON_BURST:
-                    // Boss has no status effect support — no effect
-                    break;
                 case AttackEffect::DESPERATE_STRIKE:
                     // Handled pre-roll
                     break;
@@ -2657,18 +2800,43 @@ void Game::playerAttackTurnBoss(Boss& boss, bool& bossDead) {
 }
 
 void Game::enemyAttackTurnBoss(Boss& boss) {
+    // Tick boss status effects
+    if (boss.isBleeding()) {
+        int bdmg = boss.tickBleed();
+        boss.takeDamage(bdmg);
+        std::cout << RED << "[BLEED] " << boss.getName() << " takes " << bdmg << " damage. (permanent)\n" << RESET;
+        if (!boss.isAlive()) return;
+    }
+    if (boss.isPoisoned()) {
+        int pdmg = boss.tickPoison();
+        boss.takeDamage(pdmg);
+        std::cout << RED << "[POISON] " << boss.getName() << " takes " << pdmg
+                  << " damage. [" << pdmg << " → " << boss.getPoisonStacks() << "]\n" << RESET;
+        if (!boss.isAlive()) return;
+    }
+
     // Warding Blow: player dodges this entire turn
     if (player.getBuffs().dodgeNextAttack) {
         player.getBuffs().dodgeNextAttack = false;
         std::cout << CYAN << "[WARDING] You sidestep " << boss.getName() << "'s attack completely!\n" << RESET;
+        if (boss.isBlinded()) boss.tickBlind();
         return;
     }
 
     // Ghost Step: 20% dodge
     if (player.hasRune(RuneType::GHOST_STEP) && randInt(0, 99) < 20) {
         std::cout << CYAN << "[GHOST STEP] You ghost through " << boss.getName() << "'s attack!\n" << RESET;
+        if (boss.isBlinded()) boss.tickBlind();
         return;
     }
+
+    // Blind: 30% miss chance
+    if (boss.isBlinded() && randInt(0, 99) < 30) {
+        std::cout << YELLOW << "[BLIND] " << boss.getName() << " swings wildly and misses!\n" << RESET;
+        boss.tickBlind();
+        return;
+    }
+    if (boss.isBlinded()) boss.tickBlind();
 
     int atk = boss.rollAttack();
     int def = player.rollDefense();
@@ -2701,6 +2869,8 @@ bool Game::runBossFight(Boss& boss) {
     player.getBuffs().bleeding     = false;
     player.getBuffs().poisonStacks = 0;
     player.getBuffs().blindRounds  = 0;
+    boss.clearBleed();
+    boss.clearPoison();
     if (!player.isAlive()) { gameOver(); return false; }
     return true;
 }

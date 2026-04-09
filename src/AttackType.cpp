@@ -92,9 +92,9 @@ static const std::vector<AttackType> COMMON_POOL = {
     },
     {
         "Plague Touch",
-        "Coat the blow with filth. More sticks if they're already bleeding.",
+        "Coat the blow with filth.",
         ItemRarity::COMMON, 1, 4, 0, 0, 1,
-        AttackEffect::APPLY_POISON_ADD, 2
+        AttackEffect::APPLY_POISON_ADD, 3
     },
     {
         "Desperate Strike",

@@ -29,6 +29,15 @@ private:
     int         goldReward;
     int         experienceReward;
 
+    // Status effects
+    int bleedStacks     = 0;
+    int poisonStacks    = 0;
+    int blindRounds     = 0;
+    // Resistance: subtract this % from the player's proc chance
+    int bleedResistPct  = 0;
+    int poisonResistPct = 0;
+    int blindResistPct  = 0;
+
 public:
     Boss(BossType type, int chapter);
 
@@ -49,4 +58,23 @@ public:
     std::string getIntroText()  const;
     std::string getDefeatText() const;
     std::string getPhaseText()  const;
+
+    // Status effects
+    void applyBleed();
+    void applyPoison(int stacks = 3);
+    void applyBlind(int rounds = 2);
+    void clearBleed();
+    void clearPoison();
+    bool isBleeding()         const;
+    bool isPoisoned()         const;
+    bool isBlinded()          const;
+    int  getPoisonStacks()    const;
+    int  getBlindRounds()     const;
+    int  tickBleed();          // returns 2 dmg (permanent)
+    int  tickPoison();         // returns damage, decrements stacks
+    void tickBlind();
+
+    int  getBleedResistPct()  const;
+    int  getPoisonResistPct() const;
+    int  getBlindResistPct()  const;
 };
